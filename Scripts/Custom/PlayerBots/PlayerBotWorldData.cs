@@ -52,6 +52,16 @@ namespace Server.CustomBots
         [XmlAttribute] public string Name;
         [XmlAttribute] public string Facet;
         [XmlAttribute] public string Kind;
+
+        [XmlArray("Points")]
+        [XmlArrayItem("Point")]
+        public List<PlayerBotZonePoint> Points = new List<PlayerBotZonePoint>();
+    }
+
+    public sealed class PlayerBotZonePoint
+    {
+        [XmlAttribute] public int X;
+        [XmlAttribute] public int Y;
     }
 
     public sealed class PlayerBotSpawn
@@ -166,6 +176,62 @@ namespace Server.CustomBots
                     if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
                 return matches.Count == 0 ? null : matches[Utility.Random(matches.Count)];
             }
+        }
+
+        public static bool AddZone(string name, string facet, string kind, int x, int y, int width, int height, out string message)
+        {
+            name = (name ?? "").Trim();
+            var map = PlayerBotService.GetMap(facet);
+            width = Math.Max(1, Math.Min(512, width));
+            height = Math.Max(1, Math.Min(512, height));
+            if (name.Length == 0 || name.Length > 64 || x < 0 || y < 0 || x + width >= map.Width || y + height >= map.Height)
+            {
+                message = "Zone needs a name and a rectangle inside " + map.Name + ".";
+                return false;
+            }
+            lock (Sync)
+            {
+                foreach (var zone in _data.Zones)
+                    if (String.Equals(zone.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "A zone already uses that name.";
+                        return false;
+                    }
+                var zoneData = new PlayerBotZone { Name = name, Facet = map.Name, Kind = String.IsNullOrEmpty(kind) ? "Area" : kind };
+                zoneData.Points.Add(new PlayerBotZonePoint { X = x, Y = y });
+                zoneData.Points.Add(new PlayerBotZonePoint { X = x + width, Y = y });
+                zoneData.Points.Add(new PlayerBotZonePoint { X = x + width, Y = y + height });
+                zoneData.Points.Add(new PlayerBotZonePoint { X = x, Y = y + height });
+                _data.Zones.Add(zoneData);
+                SaveLocked();
+            }
+            message = "Zone saved and reloaded.";
+            return true;
+        }
+
+        public static bool AddSpawn(string name, string facet, string role, int x, int y, int z, int count, out string message)
+        {
+            name = (name ?? "").Trim();
+            var map = PlayerBotService.GetMap(facet);
+            if (name.Length == 0 || name.Length > 64 || x < 0 || y < 0 || x >= map.Width || y >= map.Height)
+            {
+                message = "Spawn needs a name and a point inside " + map.Name + ".";
+                return false;
+            }
+            count = Math.Max(1, Math.Min(50, count));
+            lock (Sync)
+            {
+                foreach (var spawn in _data.Spawns)
+                    if (String.Equals(spawn.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "A spawn already uses that name.";
+                        return false;
+                    }
+                _data.Spawns.Add(new PlayerBotSpawn { Name = name, Facet = map.Name, Role = String.IsNullOrEmpty(role) ? "Traveler" : role, X = x, Y = y, Z = z, Count = count });
+                SaveLocked();
+            }
+            message = "Spawn definition saved. It is data only until the spawn generator is added.";
+            return true;
         }
 
         internal static void AppendDashboardJson(System.Text.StringBuilder json)

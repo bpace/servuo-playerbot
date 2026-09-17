@@ -22,6 +22,8 @@ namespace Server.CustomBots
             public int X;
             public int Y;
             public int Z;
+            public int Width;
+            public int Height;
         }
 
         private static readonly ConcurrentQueue<ActionRequest> Actions = new ConcurrentQueue<ActionRequest>();
@@ -143,7 +145,7 @@ namespace Server.CustomBots
             if (path == "/api/editor" && request.HttpMethod == "POST")
             {
                 string action;
-                if (!values.TryGetValue("action", out action) || (action != "waypoint" && action != "destination"))
+                if (!values.TryGetValue("action", out action) || (action != "waypoint" && action != "destination" && action != "zone" && action != "spawn"))
                 {
                     Write(context.Response, 400, "application/json", "{\"error\":\"invalid editor action\"}");
                     return;
@@ -159,7 +161,11 @@ namespace Server.CustomBots
                     Write(context.Response, 400, "application/json", "{\"error\":\"invalid coordinates\"}");
                     return;
                 }
-                Actions.Enqueue(new ActionRequest { Name = "editor-" + action, Facet = facet, EntityName = name, Kind = kind, X = x, Y = y, Z = z });
+                int width, height, count;
+                Int32.TryParse(values.ContainsKey("width") ? values["width"] : "0", out width);
+                Int32.TryParse(values.ContainsKey("height") ? values["height"] : "0", out height);
+                Int32.TryParse(values.ContainsKey("count") ? values["count"] : "1", out count);
+                Actions.Enqueue(new ActionRequest { Name = "editor-" + action, Facet = facet, EntityName = name, Kind = kind, X = x, Y = y, Z = z, Width = width, Height = height, Value = count });
                 Write(context.Response, 202, "application/json", "{\"accepted\":true}");
                 return;
             }
@@ -174,7 +180,7 @@ namespace Server.CustomBots
 
         private static bool IsAction(string action)
         {
-            return action == "enable" || action == "disable" || action == "population" || action == "spawn" || action == "remove" || action == "removefacet";
+            return action == "enable" || action == "disable" || action == "population" || action == "spawn" || action == "remove" || action == "removefacet" || action == "reloadworld";
         }
 
         private static Dictionary<string, string> ParseValues(HttpListenerRequest request)
@@ -212,8 +218,8 @@ namespace Server.CustomBots
             ActionRequest request;
             while (Actions.TryDequeue(out request))
             {
-                if (request.Name == "editor-waypoint" || request.Name == "editor-destination")
-                    PlayerBotService.ApplyEditorAction(request.Name, request.Facet, request.EntityName, request.Kind, request.X, request.Y, request.Z);
+                if (request.Name.StartsWith("editor-"))
+                    PlayerBotService.ApplyEditorAction(request.Name, request.Facet, request.EntityName, request.Kind, request.X, request.Y, request.Z, request.Width, request.Height, request.Value);
                 else
                     PlayerBotService.ApplyDashboardAction(request.Name, request.Value, request.Facet);
             }
