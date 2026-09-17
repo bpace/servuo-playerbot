@@ -1,0 +1,10 @@
+# Generated shard settings and runtime output
+Config/
+Logs/
+Saves/
+*.dll
+*.exe
+*.pdb
+
+# Local research fetches
+.firecrawl/

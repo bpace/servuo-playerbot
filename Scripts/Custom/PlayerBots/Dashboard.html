@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AoS PlayerBots</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; grid-template-columns: 1fr 330px; background: #101419; color: #dce6ef; font: 14px system-ui, sans-serif; }
+    main { padding: 20px; } aside { padding: 18px; background: #191f27; border-left: 1px solid #364150; }
+    h1 { margin: 0 0 4px; font-size: 22px; } small, .legend { color: #93a4b7; }
+    .bar { display: flex; gap: 8px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+    .stat { padding: 10px 14px; background: #1d2733; border-radius: 7px; }.on { color: #62d98b; }.off { color: #f57f7f; }
+    button, input, select { padding: 8px; background: #273545; color: #eef5fc; border: 1px solid #4d6176; border-radius: 5px; } button { cursor: pointer; }.danger { background: #803c46; }
+    #mapWrap { position: relative; display: inline-block; max-width: 100%; background: #162a36; border: 1px solid #3d5367; }
+    #mapImage, canvas { display: block; max-width: 100%; height: auto; } #mapImage { width: 960px; image-rendering: pixelated; } canvas { position: absolute; inset: 0; width: 100%; height: 100%; }.dot { color: #71e4ff; }.dead { color: #ff6f6f; }
+    .list { max-height: 40vh; overflow: auto; padding: 8px; background: #101419; font: 12px ui-monospace, monospace; }.event { padding: 4px; border-bottom: 1px solid #293544; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Age of Shadows PlayerBots</h1><small>Private LAN dashboard. Access is restricted by client IP.</small>
+    <div class="bar"><div class="stat">State: <b id="state"></b></div><div class="stat">Bots: <b id="count">0</b></div><div class="stat">Target: <b id="target">0</b></div><select id="map" onchange="render()"><option>Felucca</option><option>Trammel</option><option>Ilshenar</option><option>Malas</option></select></div>
+    <div id="mapWrap"><img id="mapImage" alt="Selected Ultima Online facet map"><canvas id="world" width="960" height="640"></canvas></div>
+    <div class="legend"><span class="dot">●</span> living bot &nbsp; <span class="dead">●</span> dead bot. Terrain is rendered from this shard's UO client map data.</div>
+  </main>
+  <aside>
+    <h2>Controls</h2><div class="bar"><button onclick="act('enable')">Enable</button><button onclick="act('disable')">Disable</button></div>
+    <label>Spawn facet <select id="facet"><option>Felucca</option><option>Trammel</option><option>Ilshenar</option><option>Malas</option></select></label>
+    <div class="bar"><input id="population" type="number" min="0" max="250" value="0"><button onclick="act('population', population.value)">Set target</button></div>
+    <div class="bar"><input id="spawn" type="number" min="1" max="50" value="5"><button onclick="act('spawn', spawn.value)">Spawn now</button></div>
+    <button class="danger" onclick="if(confirm('Remove every PlayerBot?')) act('remove')">Remove all bots</button>
+    <h2>Events</h2><div id="events" class="list"></div><h2>Bot census</h2><div id="bots" class="list"></div>
+  </aside>
+  <script>
+    let state = { bots: [] }, facetDirty = false;
+    facet.addEventListener('change', () => facetDirty = true);
+    async function get() { let r = await fetch('/api/state'); if (!r.ok) throw Error('This device is not allowed to access the dashboard'); state = await r.json(); render(); }
+    async function act(action, value = 0) { await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'action=' + action + '&value=' + value + '&facet=' + encodeURIComponent(facet.value) }); setTimeout(get, 300); }
+    function render() {
+      let s = document.querySelector('#state'); s.textContent = state.enabled ? 'ENABLED' : 'DISABLED'; s.className = state.enabled ? 'on' : 'off';
+      count.textContent = state.count; target.textContent = state.target; population.value = state.target;
+      if (!facetDirty) facet.value = state.spawnFacet || 'Felucca';
+      let selected = map.value, c = document.querySelector('#world'), x = c.getContext('2d'), img = document.querySelector('#mapImage');
+      if (img.dataset.facet !== selected) { img.src = '/maps/' + selected + '.png'; img.dataset.facet = selected; }
+      x.clearRect(0, 0, c.width, c.height); let dims = selected === 'Ilshenar' ? [2304,1600] : selected === 'Malas' ? [2560,2048] : [7168,4096];
+      state.bots.filter(b => b.map === selected).forEach(b => { x.fillStyle = b.alive ? '#71e4ff' : '#ff6f6f'; x.beginPath(); x.arc(b.x / dims[0] * 960, b.y / dims[1] * 640, 5, 0, 7); x.fill(); });
+      events.innerHTML = state.events.slice().reverse().map(e => '<div class="event">' + e + '</div>').join('') || 'No events yet.';
+      bots.innerHTML = state.bots.map(b => '<div>' + b.name + ' · ' + b.role + ' · ' + b.map + ' ' + b.x + ',' + b.y + ' → ' + b.destination + '</div>').join('') || 'No PlayerBots yet.';
+    }
+    get().catch(e => document.body.innerHTML = '<main><h1>Dashboard unavailable</h1><p>' + e.message + '</p></main>'); setInterval(() => get().catch(() => {}), 1000);
+  </script>
+</body>
+</html>
