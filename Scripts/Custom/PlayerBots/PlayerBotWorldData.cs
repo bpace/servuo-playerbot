@@ -241,8 +241,51 @@ namespace Server.CustomBots
                 json.Append(",\"world\":{\"waypoints\":").Append(_data.Waypoints.Count)
                     .Append(",\"destinations\":").Append(_data.Destinations.Count)
                     .Append(",\"zones\":").Append(_data.Zones.Count)
-                    .Append(",\"spawns\":").Append(_data.Spawns.Count).Append("}");
+                    .Append(",\"spawns\":").Append(_data.Spawns.Count);
+                json.Append(",\"waypointData\":[");
+                for (var i = 0; i < _data.Waypoints.Count; i++)
+                {
+                    if (i > 0) json.Append(',');
+                    var point = _data.Waypoints[i];
+                    json.Append("{\"n\":\"").Append(Escape(point.Name)).Append("\",\"f\":\"").Append(Escape(point.Facet))
+                        .Append("\",\"x\":").Append(point.X).Append(",\"y\":").Append(point.Y).Append("}");
+                }
+                json.Append("],\"destinationData\":[");
+                for (var i = 0; i < _data.Destinations.Count; i++)
+                {
+                    if (i > 0) json.Append(',');
+                    var point = _data.Destinations[i];
+                    json.Append("{\"n\":\"").Append(Escape(point.Name)).Append("\",\"f\":\"").Append(Escape(point.Facet))
+                        .Append("\",\"k\":\"").Append(Escape(point.Kind)).Append("\",\"x\":").Append(point.X).Append(",\"y\":").Append(point.Y).Append("}");
+                }
+                json.Append("],\"zoneData\":[");
+                for (var i = 0; i < _data.Zones.Count; i++)
+                {
+                    if (i > 0) json.Append(',');
+                    var zone = _data.Zones[i];
+                    json.Append("{\"n\":\"").Append(Escape(zone.Name)).Append("\",\"f\":\"").Append(Escape(zone.Facet)).Append("\",\"p\":[");
+                    for (var j = 0; j < zone.Points.Count; j++)
+                    {
+                        if (j > 0) json.Append(',');
+                        json.Append('[').Append(zone.Points[j].X).Append(',').Append(zone.Points[j].Y).Append(']');
+                    }
+                    json.Append("]}");
+                }
+                json.Append("],\"spawnData\":[");
+                for (var i = 0; i < _data.Spawns.Count; i++)
+                {
+                    if (i > 0) json.Append(',');
+                    var spawn = _data.Spawns[i];
+                    json.Append("{\"n\":\"").Append(Escape(spawn.Name)).Append("\",\"f\":\"").Append(Escape(spawn.Facet))
+                        .Append("\",\"r\":\"").Append(Escape(spawn.Role)).Append("\",\"x\":").Append(spawn.X).Append(",\"y\":").Append(spawn.Y).Append("}");
+                }
+                json.Append("]}");
             }
+        }
+
+        private static string Escape(string value)
+        {
+            return (value ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", " ");
         }
 
         private static void SaveLocked()
