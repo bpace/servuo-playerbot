@@ -20,4 +20,4 @@ This repository is independent. Its `uo-offline-upstream` remote is for research
 
 ## Current scope
 
-The mod provides headless PlayerMobile bots, city travel, chat, banking, nearby creature combat, murder reporting, resurrection, a tokenless LAN dashboard, rendered facet maps, per-action spawn-facet selection, and event/census views. The first expansion target is Trammel. Dungeon routing and the broader analytics/editor tooling remain separate work.
+The mod provides headless PlayerMobile bots, city travel, chat, banking, nearby creature combat, murder reporting, resurrection, a tokenless LAN dashboard, and rendered facet maps. The dashboard has independent targets for each facet, immediate and selected-facet removal controls, role and living-state filters, a density overlay, bot inspection, a role census, facet population analytics, and event/census views. The first expansion target is Trammel. Dungeon routing and world-data editing remain separate work.

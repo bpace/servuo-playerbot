@@ -146,7 +146,7 @@ namespace Server.CustomBots
 
         private static bool IsAction(string action)
         {
-            return action == "enable" || action == "disable" || action == "population" || action == "spawn" || action == "remove";
+            return action == "enable" || action == "disable" || action == "population" || action == "spawn" || action == "remove" || action == "removefacet";
         }
 
         private static Dictionary<string, string> ParseValues(HttpListenerRequest request)
@@ -192,7 +192,26 @@ namespace Server.CustomBots
             json.Append("{\"enabled\":").Append(PlayerBotService.Enabled ? "true" : "false")
                 .Append(",\"target\":").Append(PlayerBotService.TargetPopulation)
                 .Append(",\"spawnFacet\":\"").Append(Escape(PlayerBotService.SpawnFacet)).Append("\"")
-                .Append(",\"count\":").Append(bots.Count).Append(",\"bots\":[");
+                .Append(",\"count\":").Append(bots.Count).Append(",\"facets\":{");
+            for (var i = 0; i < PlayerBotService.FacetNames.Length; i++)
+            {
+                var facet = PlayerBotService.FacetNames[i];
+                var count = 0;
+                foreach (var bot in bots) if (bot.Map != null && bot.Map.Name == facet) count++;
+                if (i > 0) json.Append(',');
+                json.Append("\"").Append(facet).Append("\":{\"count\":").Append(count)
+                    .Append(",\"target\":").Append(PlayerBotService.GetTarget(facet)).Append("}");
+            }
+            json.Append("},\"roles\":{");
+            var roles = Enum.GetNames(typeof(PlayerBotRole));
+            for (var i = 0; i < roles.Length; i++)
+            {
+                var count = 0;
+                foreach (var bot in bots) if (bot.BotRole.ToString() == roles[i]) count++;
+                if (i > 0) json.Append(',');
+                json.Append("\"").Append(roles[i]).Append("\":").Append(count);
+            }
+            json.Append("},\"bots\":[");
             for (var i = 0; i < bots.Count; i++)
             {
                 var bot = bots[i];
