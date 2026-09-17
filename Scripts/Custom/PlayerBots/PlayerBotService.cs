@@ -68,6 +68,7 @@ namespace Server.CustomBots
         {
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
             EventSink.WorldLoad += OnWorldLoad;
+            PlayerBotWorldData.Initialize();
             _timer = Timer.DelayCall(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2), Tick);
             Timer.DelayCall(TimeSpan.FromSeconds(10), RestoreFacetLocations);
             PlayerBotDashboard.Start();
@@ -297,6 +298,13 @@ namespace Server.CustomBots
 
         private static void AssignDestination(PlayerBot bot)
         {
+            var authored = PlayerBotWorldData.RandomDestination(bot.Map);
+            if (authored != null)
+            {
+                bot.Destination = new Point3D(authored.X, authored.Y, authored.Z);
+                bot.DestinationName = authored.Name;
+                return;
+            }
             var city = RandomCity(bot.Map);
             bot.Destination = new Point3D(city.Location.X + Utility.RandomMinMax(-8, 8), city.Location.Y + Utility.RandomMinMax(-8, 8), city.Location.Z);
             bot.DestinationName = city.Name;
@@ -365,6 +373,15 @@ namespace Server.CustomBots
                 }
                 RecordEvent("Dashboard removed " + removed + " bot(s) from " + SpawnFacet + ".");
             }
+        }
+
+        internal static void ApplyEditorAction(string action, string facetName, string name, string kind, int x, int y, int z)
+        {
+            string message;
+            var success = action == "editor-waypoint"
+                ? PlayerBotWorldData.AddWaypoint(name, facetName, x, y, z, out message)
+                : PlayerBotWorldData.AddDestination(name, facetName, kind, x, y, z, out message);
+            RecordEvent("Editor " + (success ? "saved: " : "rejected: ") + message);
         }
 
         internal static int GetTarget(string facetName)
