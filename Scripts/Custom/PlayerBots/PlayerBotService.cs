@@ -373,14 +373,21 @@ namespace Server.CustomBots
                 }
                 RecordEvent("Dashboard removed " + removed + " bot(s) from " + SpawnFacet + ".");
             }
+            else if (action == "reloadworld")
+            {
+                PlayerBotWorldData.Reload();
+                RecordEvent("Dashboard reloaded PlayerBot world data.");
+            }
         }
 
-        internal static void ApplyEditorAction(string action, string facetName, string name, string kind, int x, int y, int z)
+        internal static void ApplyEditorAction(string action, string facetName, string name, string kind, int x, int y, int z, int width, int height, int count)
         {
             string message;
-            var success = action == "editor-waypoint"
-                ? PlayerBotWorldData.AddWaypoint(name, facetName, x, y, z, out message)
-                : PlayerBotWorldData.AddDestination(name, facetName, kind, x, y, z, out message);
+            bool success;
+            if (action == "editor-waypoint") success = PlayerBotWorldData.AddWaypoint(name, facetName, x, y, z, out message);
+            else if (action == "editor-destination") success = PlayerBotWorldData.AddDestination(name, facetName, kind, x, y, z, out message);
+            else if (action == "editor-zone") success = PlayerBotWorldData.AddZone(name, facetName, kind, x, y, width, height, out message);
+            else success = PlayerBotWorldData.AddSpawn(name, facetName, kind, x, y, z, count, out message);
             RecordEvent("Editor " + (success ? "saved: " : "rejected: ") + message);
         }
 
