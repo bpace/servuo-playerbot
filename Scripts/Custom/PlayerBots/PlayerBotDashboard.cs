@@ -17,6 +17,11 @@ namespace Server.CustomBots
             public string Name;
             public int Value;
             public string Facet;
+            public string EntityName;
+            public string Kind;
+            public int X;
+            public int Y;
+            public int Z;
         }
 
         private static readonly ConcurrentQueue<ActionRequest> Actions = new ConcurrentQueue<ActionRequest>();
@@ -135,6 +140,29 @@ namespace Server.CustomBots
                 Write(context.Response, 202, "application/json", "{\"accepted\":true}");
                 return;
             }
+            if (path == "/api/editor" && request.HttpMethod == "POST")
+            {
+                string action;
+                if (!values.TryGetValue("action", out action) || (action != "waypoint" && action != "destination"))
+                {
+                    Write(context.Response, 400, "application/json", "{\"error\":\"invalid editor action\"}");
+                    return;
+                }
+                var name = values.ContainsKey("name") ? values["name"] : "";
+                var kind = values.ContainsKey("kind") ? values["kind"] : "";
+                var facet = values.ContainsKey("facet") ? values["facet"] : "Felucca";
+                int x, y, z;
+                if (!Int32.TryParse(values.ContainsKey("x") ? values["x"] : "", out x) ||
+                    !Int32.TryParse(values.ContainsKey("y") ? values["y"] : "", out y) ||
+                    !Int32.TryParse(values.ContainsKey("z") ? values["z"] : "0", out z))
+                {
+                    Write(context.Response, 400, "application/json", "{\"error\":\"invalid coordinates\"}");
+                    return;
+                }
+                Actions.Enqueue(new ActionRequest { Name = "editor-" + action, Facet = facet, EntityName = name, Kind = kind, X = x, Y = y, Z = z });
+                Write(context.Response, 202, "application/json", "{\"accepted\":true}");
+                return;
+            }
             Write(context.Response, 404, "application/json", "{\"error\":\"not found\"}");
         }
 
@@ -182,7 +210,13 @@ namespace Server.CustomBots
         internal static void ProcessPendingActions()
         {
             ActionRequest request;
-            while (Actions.TryDequeue(out request)) PlayerBotService.ApplyDashboardAction(request.Name, request.Value, request.Facet);
+            while (Actions.TryDequeue(out request))
+            {
+                if (request.Name == "editor-waypoint" || request.Name == "editor-destination")
+                    PlayerBotService.ApplyEditorAction(request.Name, request.Facet, request.EntityName, request.Kind, request.X, request.Y, request.Z);
+                else
+                    PlayerBotService.ApplyDashboardAction(request.Name, request.Value, request.Facet);
+            }
         }
 
         internal static void RefreshSnapshot()
@@ -229,7 +263,9 @@ namespace Server.CustomBots
                 if (i > 0) json.Append(',');
                 json.Append("\"").Append(Escape(events[i])).Append("\"");
             }
-            json.Append("]}");
+            json.Append("]");
+            PlayerBotWorldData.AppendDashboardJson(json);
+            json.Append("}");
             lock (SnapshotLock) _snapshot = json.ToString();
         }
 
