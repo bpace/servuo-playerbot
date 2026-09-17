@@ -287,7 +287,10 @@ namespace Server.CustomBots
 
         private static byte[] RenderMap(Map map)
         {
-            const int scale = 8;
+            // Four tiles per pixel keeps the browser map compact enough for
+            // LAN use while making zoomed terrain materially clearer than
+            // the old eight-tile radar view.
+            const int scale = 4;
             var width = (map.Width + scale - 1) / scale;
             var height = (map.Height + scale - 1) / scale;
             var palette = LoadRadarPalette();
