@@ -178,6 +178,17 @@ namespace Server.CustomBots
             }
         }
 
+        internal static List<PlayerBotSpawn> GetSpawns()
+        {
+            lock (Sync)
+            {
+                var copies = new List<PlayerBotSpawn>();
+                foreach (var spawn in _data.Spawns)
+                    copies.Add(new PlayerBotSpawn { Name = spawn.Name, Facet = spawn.Facet, Role = spawn.Role, X = spawn.X, Y = spawn.Y, Z = spawn.Z, Count = spawn.Count });
+                return copies;
+            }
+        }
+
         public static bool AddZone(string name, string facet, string kind, int x, int y, int width, int height, out string message)
         {
             name = (name ?? "").Trim();
