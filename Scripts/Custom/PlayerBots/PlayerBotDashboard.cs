@@ -180,7 +180,7 @@ namespace Server.CustomBots
 
         private static bool IsAction(string action)
         {
-            return action == "enable" || action == "disable" || action == "population" || action == "spawn" || action == "remove" || action == "removefacet" || action == "reloadworld";
+            return action == "enable" || action == "disable" || action == "population" || action == "spawn" || action == "remove" || action == "removefacet" || action == "reloadworld" || action == "generatespawns";
         }
 
         private static Dictionary<string, string> ParseValues(HttpListenerRequest request)

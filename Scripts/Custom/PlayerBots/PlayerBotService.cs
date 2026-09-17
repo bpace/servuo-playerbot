@@ -114,6 +114,13 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Spawned {0} PlayerBot(s).", count);
                 return;
             }
+            if (action == "generate")
+            {
+                var created = MaterializeStoredSpawns();
+                RecordEvent("GM materialized " + created + " stored spawn bot(s).");
+                e.Mobile.SendMessage("Materialized {0} stored PlayerBot spawn(s).", created);
+                return;
+            }
             if (action == "population")
             {
                 SetTarget(SpawnFacet, Math.Max(0, Math.Min(250, e.Length > 1 ? e.GetInt32(1) : GetTarget(SpawnFacet))));
@@ -138,7 +145,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void ReconcilePopulation()
@@ -172,10 +179,39 @@ namespace Server.CustomBots
 
         private static PlayerBot SpawnAt(City city, Map map)
         {
-            var bot = new PlayerBot((PlayerBotRole)Utility.Random(4));
-            bot.MoveToWorld(city.Location, map);
+            return SpawnAt(city.Location, map, (PlayerBotRole)Utility.Random(4));
+        }
+
+        private static PlayerBot SpawnAt(Point3D location, Map map, PlayerBotRole role)
+        {
+            var bot = new PlayerBot(role);
+            bot.MoveToWorld(location, map);
             EnsureDestination(bot);
             return bot;
+        }
+
+        private static int MaterializeStoredSpawns()
+        {
+            var created = 0;
+            var bots = FindBots();
+            foreach (var definition in PlayerBotWorldData.GetSpawns())
+            {
+                var map = GetMap(definition.Facet);
+                PlayerBotRole role;
+                if (!Enum.TryParse(definition.Role, true, out role)) role = PlayerBotRole.Traveler;
+                var location = new Point3D(definition.X, definition.Y, definition.Z);
+                var present = 0;
+                foreach (var bot in bots)
+                    if (bot.Map == map && bot.BotRole == role && bot.InRange(location, 12)) present++;
+                while (present < definition.Count)
+                {
+                    var point = new Point3D(location.X + Utility.RandomMinMax(-2, 2), location.Y + Utility.RandomMinMax(-2, 2), location.Z);
+                    bots.Add(SpawnAt(point, map, role));
+                    present++;
+                    created++;
+                }
+            }
+            return created;
         }
 
         internal static List<PlayerBot> FindBots()
@@ -377,6 +413,11 @@ namespace Server.CustomBots
             {
                 PlayerBotWorldData.Reload();
                 RecordEvent("Dashboard reloaded PlayerBot world data.");
+            }
+            else if (action == "generatespawns")
+            {
+                var created = MaterializeStoredSpawns();
+                RecordEvent("Dashboard materialized " + created + " stored spawn bot(s).");
             }
         }
 
