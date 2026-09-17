@@ -14,10 +14,26 @@ namespace Server.CustomBots
         // Safe default for an online shard. An administrator must explicitly
         // set a population and enable the mod after a backup.
         public static bool Enabled = false;
-        public static int TargetPopulation = 0;
+        // Targets are facet-specific. A target only reconciles bots already
+        // assigned to that facet, so choosing Trammel never drags a bot back
+        // to Felucca.
+        private static readonly Dictionary<string, int> FacetTargets = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Felucca", 0 }, { "Trammel", 0 }, { "Ilshenar", 0 }, { "Malas", 0 }
+        };
         public static string SpawnFacet = "Felucca";
         private static Timer _timer;
         private static readonly Queue<string> Events = new Queue<string>();
+
+        public static int TargetPopulation
+        {
+            get
+            {
+                var total = 0;
+                foreach (var target in FacetTargets.Values) total += target;
+                return total;
+            }
+        }
 
         private sealed class City
         {
@@ -99,10 +115,10 @@ namespace Server.CustomBots
             }
             if (action == "population")
             {
-                TargetPopulation = Math.Max(0, Math.Min(250, e.Length > 1 ? e.GetInt32(1) : TargetPopulation));
+                SetTarget(SpawnFacet, Math.Max(0, Math.Min(250, e.Length > 1 ? e.GetInt32(1) : GetTarget(SpawnFacet))));
                 ReconcilePopulation();
-                RecordEvent("GM set target population to " + TargetPopulation + ".");
-                e.Mobile.SendMessage("PlayerBot target population: {0}.", TargetPopulation);
+                RecordEvent("GM set " + SpawnFacet + " target population to " + GetTarget(SpawnFacet) + ".");
+                e.Mobile.SendMessage("PlayerBot {0} target population: {1}.", SpawnFacet, GetTarget(SpawnFacet));
                 return;
             }
             if (action == "on" || action == "off")
@@ -121,19 +137,25 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, target {1}, system {2}. Commands: spawn [count], population [count], on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void ReconcilePopulation()
         {
             if (!Enabled) return;
             var bots = FindBots();
-            while (bots.Count < TargetPopulation)
+            foreach (var facetName in FacetNames)
             {
-                var facet = GetSpawnMap();
-                var bot = SpawnAt(RandomCity(facet), facet);
-                bots.Add(bot);
-                RecordEvent("Spawned " + bot.Name + " in " + bot.DestinationName + ".");
+                var facet = GetMap(facetName);
+                var current = 0;
+                foreach (var bot in bots) if (bot.Map == facet) current++;
+                while (current < GetTarget(facetName))
+                {
+                    var bot = SpawnAt(RandomCity(facet), facet);
+                    bots.Add(bot);
+                    current++;
+                    RecordEvent("Spawned " + bot.Name + " in " + bot.DestinationName + ".");
+                }
             }
         }
 
@@ -314,9 +336,9 @@ namespace Server.CustomBots
             }
             else if (action == "population")
             {
-                TargetPopulation = Math.Max(0, Math.Min(250, value));
+                SetTarget(SpawnFacet, Math.Max(0, Math.Min(250, value)));
                 if (Enabled) ReconcilePopulation();
-                RecordEvent("Dashboard set target population to " + TargetPopulation + " on " + SpawnFacet + ".");
+                RecordEvent("Dashboard set " + SpawnFacet + " target population to " + GetTarget(SpawnFacet) + ".");
             }
             else if (action == "spawn")
             {
@@ -331,7 +353,32 @@ namespace Server.CustomBots
                 foreach (var bot in bots) bot.Delete();
                 RecordEvent("Dashboard removed " + bots.Count + " bot(s).");
             }
+            else if (action == "removefacet")
+            {
+                var facet = GetSpawnMap();
+                var removed = 0;
+                foreach (var bot in FindBots())
+                {
+                    if (bot.Map != facet) continue;
+                    bot.Delete();
+                    removed++;
+                }
+                RecordEvent("Dashboard removed " + removed + " bot(s) from " + SpawnFacet + ".");
+            }
         }
+
+        internal static int GetTarget(string facetName)
+        {
+            int value;
+            return FacetTargets.TryGetValue(GetMap(facetName).Name, out value) ? value : 0;
+        }
+
+        private static void SetTarget(string facetName, int value)
+        {
+            FacetTargets[GetMap(facetName).Name] = value;
+        }
+
+        internal static readonly string[] FacetNames = { "Felucca", "Trammel", "Ilshenar", "Malas" };
 
         private static Map GetSpawnMap()
         {
