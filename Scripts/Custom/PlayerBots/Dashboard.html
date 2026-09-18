@@ -101,4 +101,21 @@ if(help){
  const button=document.querySelector('.gameActionStrip .roadPks');
  if(button){button.disabled=false;button.title='Materialize authored unguarded Felucca Player Killer spawn definitions. They attack real nearby players only while PlayerBots are enabled.';button.onclick=()=>{if(confirm('Spawn authored road PKs at unguarded Felucca locations?'))act('spawnroadpks')}}
 })();
+</script><style>
+.roadPkHelp{display:block;margin:5px 0 2px;color:#f2b2b7;font-size:11px}.roadPkHelp.ready{color:#ffcf82}
+</style><script>
+/* Make the explicit authoring requirement visible before an administrator
+   expects the materialize action to create anything. Server validation is
+   still authoritative for guarded regions and hand-edited data. */
+(()=>{
+ const spawnRole=document.getElementById('spawnRole'),spawnName=document.getElementById('spawnName');
+ const spawnButton=[...document.querySelectorAll('button')].find(button=>button.textContent.includes('Save spawn at route point'));
+ const roadButton=document.querySelector('.gameActionStrip .roadPks');
+ if(!spawnRole||!roadButton)return;
+ const help=document.createElement('small');help.className='roadPkHelp';spawnRole.closest('.controls').insertAdjacentElement('afterend',help);
+ const describe=()=>{const pk=spawnRole.value==='PlayerKiller';help.textContent=pk?'Road PK: Felucca only. Pick an unguarded road point on the map, then save this spawn definition.':'Choose Player Killer to author a legal unguarded Felucca road ambush.';help.classList.toggle('ready',pk);if(spawnButton)spawnButton.textContent=pk?'Save road PK spawn':'Save spawn at route point'};
+ spawnRole.addEventListener('change',describe);describe();
+ const saveSpawn=editorAdvanced;editorAdvanced=async action=>{if(action==='spawn'&&spawnRole.value==='PlayerKiller'&&map.value!=='Felucca'){alert('Road PKs can only be authored on Felucca. Select Felucca, choose an unguarded road point, then save.');return}return saveSpawn(action)};
+ const renderBeforeRoadPkStatus=render;render=function(){renderBeforeRoadPkStatus();const spawns=((state.world||{}).spawnData||[]).filter(spawn=>spawn.r==='PlayerKiller');roadButton.disabled=spawns.length===0;roadButton.textContent='☠ Spawn road PKs'+(spawns.length?' ('+spawns.length+')':'');roadButton.title=spawns.length?'Materialize '+spawns.length+' authored unguarded Felucca road PK definition'+(spawns.length===1?'':'s')+'.':'Create a Player Killer spawn definition at an unguarded Felucca road point first.'};
+})();
 </script></body></html>
