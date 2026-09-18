@@ -31,6 +31,11 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime NextChat { get; set; }
 
+        // Empty for manual/population bots. Stored-spawn bots retain the
+        // definition that owns them so regenerate never touches others.
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string SpawnSource { get; set; }
+
         [Constructable]
         public PlayerBot() : this(PlayerBotRole.Traveler)
         {
@@ -62,6 +67,7 @@ namespace Server.CustomBots
             AddToBackpack(new Gold(Utility.RandomMinMax(100, 450)));
             Destination = Point3D.Zero;
             DestinationName = "";
+            SpawnSource = "";
         }
 
         public PlayerBot(Serial serial) : base(serial)
@@ -83,23 +89,25 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(0);
+            writer.Write(1);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
             writer.Write(NextAction);
             writer.Write(NextChat);
+            writer.Write(SpawnSource);
         }
 
         public override void Deserialize(GenericReader reader)
         {
             base.Deserialize(reader);
-            _ = reader.ReadInt();
+            var version = reader.ReadInt();
             BotRole = (PlayerBotRole)reader.ReadInt();
             Destination = reader.ReadPoint3D();
             DestinationName = reader.ReadString() ?? "";
             NextAction = reader.ReadDateTime();
             NextChat = reader.ReadDateTime();
+            SpawnSource = version >= 1 ? reader.ReadString() ?? "" : "";
             Player = false;
         }
     }

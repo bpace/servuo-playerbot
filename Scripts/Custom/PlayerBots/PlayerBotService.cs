@@ -202,11 +202,13 @@ namespace Server.CustomBots
                 var location = new Point3D(definition.X, definition.Y, definition.Z);
                 var present = 0;
                 foreach (var bot in bots)
-                    if (bot.Map == map && bot.BotRole == role && bot.InRange(location, 12)) present++;
+                    if (bot.Map == map && bot.BotRole == role && String.Equals(bot.SpawnSource, definition.Name, StringComparison.OrdinalIgnoreCase)) present++;
                 while (present < definition.Count)
                 {
                     var point = new Point3D(location.X + Utility.RandomMinMax(-2, 2), location.Y + Utility.RandomMinMax(-2, 2), location.Z);
-                    bots.Add(SpawnAt(point, map, role));
+                    var bot = SpawnAt(point, map, role);
+                    bot.SpawnSource = definition.Name;
+                    bots.Add(bot);
                     present++;
                     created++;
                 }
@@ -418,6 +420,18 @@ namespace Server.CustomBots
             {
                 var created = MaterializeStoredSpawns();
                 RecordEvent("Dashboard materialized " + created + " stored spawn bot(s).");
+            }
+            else if (action == "regeneratespawns")
+            {
+                var removed = 0;
+                foreach (var bot in FindBots())
+                {
+                    if (String.IsNullOrEmpty(bot.SpawnSource)) continue;
+                    bot.Delete();
+                    removed++;
+                }
+                var created = MaterializeStoredSpawns();
+                RecordEvent("Dashboard regenerated stored spawns: removed " + removed + ", created " + created + ".");
             }
         }
 
