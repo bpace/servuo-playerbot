@@ -118,4 +118,16 @@ if(help){
  const saveSpawn=editorAdvanced;editorAdvanced=async action=>{if(action==='spawn'&&spawnRole.value==='PlayerKiller'&&map.value!=='Felucca'){alert('Road PKs can only be authored on Felucca. Select Felucca, choose an unguarded road point, then save.');return}return saveSpawn(action)};
  const renderBeforeRoadPkStatus=render;render=function(){renderBeforeRoadPkStatus();const spawns=((state.world||{}).spawnData||[]).filter(spawn=>spawn.r==='PlayerKiller');roadButton.disabled=spawns.length===0;roadButton.textContent='☠ Spawn road PKs'+(spawns.length?' ('+spawns.length+')':'');roadButton.title=spawns.length?'Materialize '+spawns.length+' authored unguarded Felucca road PK definition'+(spawns.length===1?'':'s')+'.':'Create a Player Killer spawn definition at an unguarded Felucca road point first.'};
 })();
+</script><style>
+.liveKinds .player{color:#ffe26d}.livePlayerNote{display:block;margin:3px 0;color:#b8a968;font-size:11px}
+</style><script>
+/* Connected player locations stay inside the existing IP-restricted dashboard.
+   This is intentionally a narrow operational layer, not a world-mob census. */
+(()=>{
+ const kinds=document.querySelector('.liveKinds'),summary=document.getElementById('liveSummary');
+ if(!kinds||!summary)return;
+ kinds.innerHTML='<label><input type="checkbox" checked disabled> <span class="bot">Bot</span></label><label><input id="livePlayers" type="checkbox" checked> <span class="player">Player</span></label><br><small class="livePlayerNote">Connected non-staff players only. Visible on this private dashboard.</small>';
+ const renderBeforePlayers=render;render=function(){renderBeforePlayers();const players=(state.players||[]);summary.textContent='· '+state.count+' bots · '+players.length+' players';if(!liveToggle.checked||!livePlayers.checked)return;const d=dimensions(map.value),ctx=world.getContext('2d');ctx.save();players.filter(player=>player.map===map.value).forEach(player=>{const p=point(player,d);ctx.fillStyle=player.alive?'#ffe26d':'#a98f40';ctx.strokeStyle='#201b04';ctx.lineWidth=Math.max(1,1.5/camera.scale);ctx.beginPath();ctx.rect(p[0]-5,p[1]-5,10,10);ctx.fill();ctx.stroke();if(lLabels.checked&&camera.scale/camera.base>2){ctx.fillStyle='#fff1a3';ctx.font=Math.max(11,12/camera.scale)+'px system-ui';ctx.fillText(player.name,p[0]+8,p[1]-7)}});ctx.restore()};
+ livePlayers.addEventListener('change',render);
+})();
 </script></body></html>
