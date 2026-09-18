@@ -19,6 +19,7 @@ namespace Server.CustomBots
             public string Facet;
             public string EntityName;
             public string Kind;
+            public string OtherName;
             public int X;
             public int Y;
             public int Z;
@@ -145,13 +146,14 @@ namespace Server.CustomBots
             if (path == "/api/editor" && request.HttpMethod == "POST")
             {
                 string action;
-                if (!values.TryGetValue("action", out action) || (action != "waypoint" && action != "destination" && action != "zone" && action != "spawn"))
+                if (!values.TryGetValue("action", out action) || (action != "waypoint" && action != "destination" && action != "zone" && action != "spawn" && action != "portal"))
                 {
                     Write(context.Response, 400, "application/json", "{\"error\":\"invalid editor action\"}");
                     return;
                 }
                 var name = values.ContainsKey("name") ? values["name"] : "";
                 var kind = values.ContainsKey("kind") ? values["kind"] : "";
+                var other = values.ContainsKey("other") ? values["other"] : "";
                 var facet = values.ContainsKey("facet") ? values["facet"] : "Felucca";
                 int x, y, z;
                 if (!Int32.TryParse(values.ContainsKey("x") ? values["x"] : "", out x) ||
@@ -165,7 +167,7 @@ namespace Server.CustomBots
                 Int32.TryParse(values.ContainsKey("width") ? values["width"] : "0", out width);
                 Int32.TryParse(values.ContainsKey("height") ? values["height"] : "0", out height);
                 Int32.TryParse(values.ContainsKey("count") ? values["count"] : "1", out count);
-                Actions.Enqueue(new ActionRequest { Name = "editor-" + action, Facet = facet, EntityName = name, Kind = kind, X = x, Y = y, Z = z, Width = width, Height = height, Value = count });
+                Actions.Enqueue(new ActionRequest { Name = "editor-" + action, Facet = facet, EntityName = name, Kind = kind, OtherName = other, X = x, Y = y, Z = z, Width = width, Height = height, Value = count });
                 Write(context.Response, 202, "application/json", "{\"accepted\":true}");
                 return;
             }
@@ -219,7 +221,7 @@ namespace Server.CustomBots
             while (Actions.TryDequeue(out request))
             {
                 if (request.Name.StartsWith("editor-"))
-                    PlayerBotService.ApplyEditorAction(request.Name, request.Facet, request.EntityName, request.Kind, request.X, request.Y, request.Z, request.Width, request.Height, request.Value);
+                    PlayerBotService.ApplyEditorAction(request.Name, request.Facet, request.EntityName, request.Kind, request.OtherName, request.X, request.Y, request.Z, request.Width, request.Height, request.Value);
                 else
                     PlayerBotService.ApplyDashboardAction(request.Name, request.Value, request.Facet);
             }

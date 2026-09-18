@@ -310,6 +310,39 @@ namespace Server.CustomBots
 
         private static void Arrive(PlayerBot bot)
         {
+            if (!String.IsNullOrEmpty(bot.DungeonReturnName))
+            {
+                if (DateTime.UtcNow < bot.DungeonReturnAt)
+                {
+                    SayAtInterval(bot, "dungeon", "The depths are dangerous, but the loot is worth it.");
+                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 30));
+                    return;
+                }
+                var exit = PlayerBotWorldData.GetDestination(bot.DungeonReturnName, bot.Map);
+                if (exit != null)
+                {
+                    bot.MoveToWorld(new Point3D(exit.X, exit.Y, exit.Z), bot.Map);
+                    RecordEvent(bot.Name + " returned from " + bot.DestinationName + " to " + exit.Name + ".");
+                }
+                bot.DungeonReturnName = "";
+                bot.DungeonReturnAt = DateTime.MinValue;
+                AssignDestination(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                return;
+            }
+            PlayerBotDestination interior;
+            if (PlayerBotWorldData.TryEnterDungeon(bot, out interior))
+            {
+                var entrance = bot.DestinationName;
+                bot.MoveToWorld(new Point3D(interior.X, interior.Y, interior.Z), bot.Map);
+                bot.Destination = new Point3D(interior.X, interior.Y, interior.Z);
+                bot.DestinationName = interior.Name;
+                bot.DungeonReturnName = entrance;
+                bot.DungeonReturnAt = DateTime.UtcNow + TimeSpan.FromMinutes(Utility.RandomMinMax(2, 6));
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                RecordEvent(bot.Name + " entered " + interior.Name + " through " + entrance + ".");
+                return;
+            }
             if (bot.BotRole == PlayerBotRole.Banker)
             {
                 Banker.Deposit(bot, 100, false);
@@ -435,13 +468,14 @@ namespace Server.CustomBots
             }
         }
 
-        internal static void ApplyEditorAction(string action, string facetName, string name, string kind, int x, int y, int z, int width, int height, int count)
+        internal static void ApplyEditorAction(string action, string facetName, string name, string kind, string otherName, int x, int y, int z, int width, int height, int count)
         {
             string message;
             bool success;
             if (action == "editor-waypoint") success = PlayerBotWorldData.AddWaypoint(name, facetName, x, y, z, out message);
             else if (action == "editor-destination") success = PlayerBotWorldData.AddDestination(name, facetName, kind, x, y, z, out message);
             else if (action == "editor-zone") success = PlayerBotWorldData.AddZone(name, facetName, kind, x, y, width, height, out message);
+            else if (action == "editor-portal") success = PlayerBotWorldData.AddDungeonLink(name, facetName, kind, otherName, out message);
             else success = PlayerBotWorldData.AddSpawn(name, facetName, kind, x, y, z, count, out message);
             RecordEvent("Editor " + (success ? "saved: " : "rejected: ") + message);
         }

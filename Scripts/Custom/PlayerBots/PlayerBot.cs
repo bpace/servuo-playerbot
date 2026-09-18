@@ -36,6 +36,12 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public string SpawnSource { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string DungeonReturnName { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime DungeonReturnAt { get; set; }
+
         [Constructable]
         public PlayerBot() : this(PlayerBotRole.Traveler)
         {
@@ -68,6 +74,8 @@ namespace Server.CustomBots
             Destination = Point3D.Zero;
             DestinationName = "";
             SpawnSource = "";
+            DungeonReturnName = "";
+            DungeonReturnAt = DateTime.MinValue;
         }
 
         public PlayerBot(Serial serial) : base(serial)
@@ -89,13 +97,15 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(1);
+            writer.Write(2);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
             writer.Write(NextAction);
             writer.Write(NextChat);
             writer.Write(SpawnSource);
+            writer.Write(DungeonReturnName);
+            writer.Write(DungeonReturnAt);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -108,6 +118,8 @@ namespace Server.CustomBots
             NextAction = reader.ReadDateTime();
             NextChat = reader.ReadDateTime();
             SpawnSource = version >= 1 ? reader.ReadString() ?? "" : "";
+            DungeonReturnName = version >= 2 ? reader.ReadString() ?? "" : "";
+            DungeonReturnAt = version >= 2 ? reader.ReadDateTime() : DateTime.MinValue;
             Player = false;
         }
     }

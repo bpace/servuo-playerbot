@@ -26,6 +26,10 @@ namespace Server.CustomBots
         [XmlArray("Spawns")]
         [XmlArrayItem("Spawn")]
         public List<PlayerBotSpawn> Spawns = new List<PlayerBotSpawn>();
+
+        [XmlArray("DungeonLinks")]
+        [XmlArrayItem("Link")]
+        public List<PlayerBotDungeonLink> DungeonLinks = new List<PlayerBotDungeonLink>();
     }
 
     public sealed class PlayerBotWaypoint
@@ -73,6 +77,14 @@ namespace Server.CustomBots
         [XmlAttribute] public int Y;
         [XmlAttribute] public int Z;
         [XmlAttribute] public int Count;
+    }
+
+    public sealed class PlayerBotDungeonLink
+    {
+        [XmlAttribute] public string Name;
+        [XmlAttribute] public string Facet;
+        [XmlAttribute] public string EntranceName;
+        [XmlAttribute] public string InteriorName;
     }
 
     public static class PlayerBotWorldData
@@ -173,8 +185,16 @@ namespace Server.CustomBots
             {
                 var matches = new List<PlayerBotDestination>();
                 foreach (var destination in _data.Destinations)
-                    if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
+                    if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase) && !String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
                 return matches.Count == 0 ? null : matches[Utility.Random(matches.Count)];
+            }
+        }
+
+        internal static PlayerBotDestination GetDestination(string name, Map map)
+        {
+            lock (Sync)
+            {
+                return map == null ? null : FindDestinationLocked(name, map.Name);
             }
         }
 
@@ -245,6 +265,62 @@ namespace Server.CustomBots
             return true;
         }
 
+        public static bool AddDungeonLink(string name, string facet, string entranceName, string interiorName, out string message)
+        {
+            name = (name ?? "").Trim();
+            entranceName = (entranceName ?? "").Trim();
+            interiorName = (interiorName ?? "").Trim();
+            var map = PlayerBotService.GetMap(facet);
+            if (name.Length == 0 || name.Length > 64 || entranceName.Length == 0 || interiorName.Length == 0 || String.Equals(entranceName, interiorName, StringComparison.OrdinalIgnoreCase))
+            {
+                message = "Dungeon link needs a name plus different entrance and interior destinations.";
+                return false;
+            }
+            lock (Sync)
+            {
+                var entrance = FindDestinationLocked(entranceName, map.Name);
+                var interior = FindDestinationLocked(interiorName, map.Name);
+                if (entrance == null || interior == null)
+                {
+                    message = "Create both named destinations on " + map.Name + " before linking them.";
+                    return false;
+                }
+                foreach (var link in _data.DungeonLinks)
+                    if (String.Equals(link.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "A dungeon link already uses that name.";
+                        return false;
+                    }
+                _data.DungeonLinks.Add(new PlayerBotDungeonLink { Name = name, Facet = map.Name, EntranceName = entrance.Name, InteriorName = interior.Name });
+                SaveLocked();
+            }
+            message = "Dungeon link saved and reloaded.";
+            return true;
+        }
+
+        internal static bool TryEnterDungeon(PlayerBot bot, out PlayerBotDestination interior)
+        {
+            interior = null;
+            if (bot == null || bot.Map == null) return false;
+            lock (Sync)
+            {
+                foreach (var link in _data.DungeonLinks)
+                {
+                    if (!String.Equals(link.Facet, bot.Map.Name, StringComparison.OrdinalIgnoreCase) || !String.Equals(link.EntranceName, bot.DestinationName, StringComparison.OrdinalIgnoreCase)) continue;
+                    interior = FindDestinationLocked(link.InteriorName, bot.Map.Name);
+                    return interior != null;
+                }
+            }
+            return false;
+        }
+
+        private static PlayerBotDestination FindDestinationLocked(string name, string facet)
+        {
+            foreach (var destination in _data.Destinations)
+                if (String.Equals(destination.Name, name, StringComparison.OrdinalIgnoreCase) && String.Equals(destination.Facet, facet, StringComparison.OrdinalIgnoreCase)) return destination;
+            return null;
+        }
+
         internal static void AppendDashboardJson(System.Text.StringBuilder json)
         {
             lock (Sync)
@@ -252,7 +328,7 @@ namespace Server.CustomBots
                 json.Append(",\"world\":{\"waypoints\":").Append(_data.Waypoints.Count)
                     .Append(",\"destinations\":").Append(_data.Destinations.Count)
                     .Append(",\"zones\":").Append(_data.Zones.Count)
-                    .Append(",\"spawns\":").Append(_data.Spawns.Count);
+                    .Append(",\"spawns\":").Append(_data.Spawns.Count).Append(",\"dungeonLinks\":").Append(_data.DungeonLinks.Count);
                 json.Append(",\"waypointData\":[");
                 for (var i = 0; i < _data.Waypoints.Count; i++)
                 {
@@ -289,6 +365,14 @@ namespace Server.CustomBots
                     var spawn = _data.Spawns[i];
                     json.Append("{\"n\":\"").Append(Escape(spawn.Name)).Append("\",\"f\":\"").Append(Escape(spawn.Facet))
                         .Append("\",\"r\":\"").Append(Escape(spawn.Role)).Append("\",\"x\":").Append(spawn.X).Append(",\"y\":").Append(spawn.Y).Append("}");
+                }
+                json.Append("],\"dungeonLinkData\":[");
+                for (var i = 0; i < _data.DungeonLinks.Count; i++)
+                {
+                    if (i > 0) json.Append(',');
+                    var link = _data.DungeonLinks[i];
+                    json.Append("{\"n\":\"").Append(Escape(link.Name)).Append("\",\"f\":\"").Append(Escape(link.Facet))
+                        .Append("\",\"a\":\"").Append(Escape(link.EntranceName)).Append("\",\"b\":\"").Append(Escape(link.InteriorName)).Append("\"}");
                 }
                 json.Append("]}");
             }
