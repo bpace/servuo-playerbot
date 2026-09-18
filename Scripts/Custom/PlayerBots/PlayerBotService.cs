@@ -121,6 +121,13 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Materialized {0} stored PlayerBot spawn(s).", created);
                 return;
             }
+            if (action == "roadpks")
+            {
+                var created = MaterializeRoadPks();
+                RecordEvent("GM materialized " + created + " road PK bot(s).");
+                e.Mobile.SendMessage("Materialized {0} road PK bot(s).", created);
+                return;
+            }
             if (action == "population")
             {
                 SetTarget(SpawnFacet, Math.Max(0, Math.Min(250, e.Length > 1 ? e.GetInt32(1) : GetTarget(SpawnFacet))));
@@ -192,6 +199,16 @@ namespace Server.CustomBots
 
         private static int MaterializeStoredSpawns()
         {
+            return MaterializeStoredSpawns(false);
+        }
+
+        private static int MaterializeRoadPks()
+        {
+            return MaterializeStoredSpawns(true);
+        }
+
+        private static int MaterializeStoredSpawns(bool roadPksOnly)
+        {
             var created = 0;
             var bots = FindBots();
             foreach (var definition in PlayerBotWorldData.GetSpawns())
@@ -199,15 +216,26 @@ namespace Server.CustomBots
                 var map = GetMap(definition.Facet);
                 PlayerBotRole role;
                 if (!Enum.TryParse(definition.Role, true, out role)) role = PlayerBotRole.Traveler;
+                if (roadPksOnly != (role == PlayerBotRole.PlayerKiller)) continue;
                 var location = new Point3D(definition.X, definition.Y, definition.Z);
+                if (role == PlayerBotRole.PlayerKiller && !PlayerBotWorldData.IsLegalRoadPkLocation(map, location.X, location.Y, location.Z))
+                {
+                    RecordEvent("Ignored invalid road PK spawn definition " + definition.Name + ".");
+                    continue;
+                }
                 var present = 0;
                 foreach (var bot in bots)
                     if (bot.Map == map && bot.BotRole == role && String.Equals(bot.SpawnSource, definition.Name, StringComparison.OrdinalIgnoreCase)) present++;
                 while (present < definition.Count)
                 {
-                    var point = new Point3D(location.X + Utility.RandomMinMax(-2, 2), location.Y + Utility.RandomMinMax(-2, 2), location.Z);
+                    var point = role == PlayerBotRole.PlayerKiller ? location : new Point3D(location.X + Utility.RandomMinMax(-2, 2), location.Y + Utility.RandomMinMax(-2, 2), location.Z);
                     var bot = SpawnAt(point, map, role);
                     bot.SpawnSource = definition.Name;
+                    if (role == PlayerBotRole.PlayerKiller)
+                    {
+                        bot.Destination = location;
+                        bot.DestinationName = "Road PK: " + definition.Name;
+                    }
                     bots.Add(bot);
                     present++;
                     created++;
@@ -283,6 +311,7 @@ namespace Server.CustomBots
 
         private static bool TryFight(PlayerBot bot)
         {
+            if (bot.BotRole == PlayerBotRole.PlayerKiller) return TryFightPlayer(bot);
             if (bot.Combatant is Mobile current && !current.Deleted && current.Alive && bot.InRange(current, 12))
             {
                 if (!bot.InRange(current, 1)) bot.Move(bot.GetDirectionTo(current) | Direction.Running);
@@ -308,8 +337,50 @@ namespace Server.CustomBots
             return false;
         }
 
+        private static bool TryFightPlayer(PlayerBot bot)
+        {
+            if (!PlayerBotWorldData.IsLegalRoadPkLocation(bot.Map, bot.X, bot.Y, bot.Z))
+            {
+                bot.Combatant = null;
+                return false;
+            }
+            var current = bot.Combatant as PlayerMobile;
+            if (IsRoadPkTarget(bot, current) && bot.InRange(current, 18))
+            {
+                if (!bot.InRange(current, bot.Weapon.MaxRange)) bot.Move(bot.GetDirectionTo(current) | Direction.Running);
+                return true;
+            }
+            IPooledEnumerable nearby = bot.GetMobilesInRange(12);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var player = mobile as PlayerMobile;
+                    if (!IsRoadPkTarget(bot, player)) continue;
+                    bot.Combatant = player;
+                    bot.Warmode = true;
+                    bot.DoHarmful(player);
+                    bot.Say("Your gold or your life!");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
+        }
+
+        private static bool IsRoadPkTarget(PlayerBot bot, PlayerMobile player)
+        {
+            return player != null && player.Player && !player.Deleted && player.Alive && !player.IsStaff()
+                && player.Map == bot.Map && bot.CanBeHarmful(player, false);
+        }
+
         private static void Arrive(PlayerBot bot)
         {
+            if (bot.BotRole == PlayerBotRole.PlayerKiller)
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+                return;
+            }
             if (!String.IsNullOrEmpty(bot.DungeonReturnName))
             {
                 if (DateTime.UtcNow < bot.DungeonReturnAt)
@@ -454,6 +525,11 @@ namespace Server.CustomBots
                 var created = MaterializeStoredSpawns();
                 RecordEvent("Dashboard materialized " + created + " stored spawn bot(s).");
             }
+            else if (action == "spawnroadpks")
+            {
+                var created = MaterializeRoadPks();
+                RecordEvent("Dashboard materialized " + created + " road PK bot(s)." + (Enabled ? "" : " PlayerBots are disabled, so they will not act until enabled."));
+            }
             else if (action == "regeneratespawns")
             {
                 var removed = 0;
@@ -463,7 +539,7 @@ namespace Server.CustomBots
                     bot.Delete();
                     removed++;
                 }
-                var created = MaterializeStoredSpawns();
+                var created = MaterializeStoredSpawns() + MaterializeRoadPks();
                 RecordEvent("Dashboard regenerated stored spawns: removed " + removed + ", created " + created + ".");
             }
         }

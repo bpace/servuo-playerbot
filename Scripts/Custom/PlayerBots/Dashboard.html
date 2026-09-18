@@ -90,4 +90,15 @@ if(help){
  const search=botSearch.closest('.panel');search.insertAdjacentHTML('beforeend','<div class="searchTools"><button id="helpZoomIn" title="Zoom in">+</button><button id="helpZoomOut" title="Zoom out">−</button><button id="homeBritain" title="Center Felucca on Britain">Britain</button><button id="helpRefresh" class="refresh" title="Refresh shard data">↻ Refresh</button></div>');helpZoomIn.onclick=()=>zoomAt(1.5);helpZoomOut.onclick=()=>zoomAt(1/1.5);helpRefresh.onclick=()=>get();homeBritain.onclick=()=>{const focus=()=>{const d=dimensions('Felucca'),x=1336/d[0]*world.width,y=1997/d[1]*world.height;camera.scale=Math.min(camera.base*5,camera.base*12);camera.x=mapViewport.clientWidth/2-x*camera.scale;camera.y=mapViewport.clientHeight/2-y*camera.scale;applyCamera()};if(map.value!=='Felucca'){map.value='Felucca';map.dispatchEvent(new Event('change'));mapImage.addEventListener('load',focus,{once:true});setTimeout(focus,100)}else focus()};
 }
 })();
+</script><script>
+/* Road PKs are deliberately authored spawn definitions, never random facet
+   population. The server validates Felucca and guarded-region rules again. */
+(()=>{
+ const roles=document.getElementById('roleFilters');
+ if(roles&&!roles.querySelector('[value="PlayerKiller"]'))roles.insertAdjacentHTML('beforeend','<label><input type="checkbox" value="PlayerKiller" checked> Player Killer</label>');
+ const spawnRole=document.getElementById('spawnRole');
+ if(spawnRole&&!spawnRole.querySelector('option[value="PlayerKiller"]'))spawnRole.insertAdjacentHTML('beforeend','<option value="PlayerKiller">Player Killer</option>');
+ const button=document.querySelector('.gameActionStrip .roadPks');
+ if(button){button.disabled=false;button.title='Materialize authored unguarded Felucca Player Killer spawn definitions. They attack real nearby players only while PlayerBots are enabled.';button.onclick=()=>{if(confirm('Spawn authored road PKs at unguarded Felucca locations?'))act('spawnroadpks')}}
+})();
 </script></body></html>
