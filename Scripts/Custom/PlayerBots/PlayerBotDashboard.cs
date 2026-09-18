@@ -30,10 +30,18 @@ namespace Server.CustomBots
         private static readonly ConcurrentQueue<ActionRequest> Actions = new ConcurrentQueue<ActionRequest>();
         private static readonly ConcurrentDictionary<string, byte[]> MapImages = new ConcurrentDictionary<string, byte[]>();
         private static readonly object SnapshotLock = new object();
+        private static readonly Dictionary<Serial, BotMotionSample> BotMotion = new Dictionary<Serial, BotMotionSample>();
         private static string _snapshot = "{\"enabled\":false,\"target\":0,\"count\":0,\"bots\":[],\"events\":[]}";
         private static HttpListener _listener;
         private static string _bindAddress = "192.168.50.139";
         private static string _allowedAddress = "192.168.50.81";
+
+        private sealed class BotMotionSample
+        {
+            public Point3D Location;
+            public Map Map;
+            public DateTime MovedAt;
+        }
         private static int _port = 8081;
         private static bool _started;
 
@@ -230,6 +238,8 @@ namespace Server.CustomBots
         internal static void RefreshSnapshot()
         {
             var bots = PlayerBotService.FindBots();
+            var now = DateTime.UtcNow;
+            var liveSerials = new HashSet<Serial>();
             var json = new StringBuilder(512 + bots.Count * 160);
             json.Append("{\"enabled\":").Append(PlayerBotService.Enabled ? "true" : "false")
                 .Append(",\"target\":").Append(PlayerBotService.TargetPopulation)
@@ -257,13 +267,18 @@ namespace Server.CustomBots
             for (var i = 0; i < bots.Count; i++)
             {
                 var bot = bots[i];
+                liveSerials.Add(bot.Serial);
                 if (i > 0) json.Append(',');
                 json.Append("{\"name\":\"").Append(Escape(bot.Name)).Append("\",\"role\":\"")
                     .Append(bot.BotRole).Append("\",\"map\":\"").Append(Escape(bot.Map == null ? "Internal" : bot.Map.Name))
                     .Append("\",\"x\":").Append(bot.X).Append(",\"y\":").Append(bot.Y)
                     .Append(",\"alive\":").Append(bot.Alive ? "true" : "false")
+                    .Append(",\"stuck\":").Append(IsStuck(bot, now) ? "true" : "false")
                     .Append(",\"destination\":\"").Append(Escape(bot.DestinationName)).Append("\"}");
             }
+            var staleSerials = new List<Serial>();
+            foreach (var serial in BotMotion.Keys) if (!liveSerials.Contains(serial)) staleSerials.Add(serial);
+            foreach (var serial in staleSerials) BotMotion.Remove(serial);
             json.Append("],\"events\":[");
             var events = PlayerBotService.GetEvents();
             for (var i = 0; i < events.Count; i++)
@@ -275,6 +290,27 @@ namespace Server.CustomBots
             PlayerBotWorldData.AppendDashboardJson(json);
             json.Append("}");
             lock (SnapshotLock) _snapshot = json.ToString();
+        }
+
+        private static bool IsStuck(PlayerBot bot, DateTime now)
+        {
+            BotMotionSample sample;
+            if (!BotMotion.TryGetValue(bot.Serial, out sample))
+            {
+                BotMotion[bot.Serial] = new BotMotionSample { Location = bot.Location, Map = bot.Map, MovedAt = now };
+                return false;
+            }
+            if (sample.Location != bot.Location || sample.Map != bot.Map)
+            {
+                sample.Location = bot.Location;
+                sample.Map = bot.Map;
+                sample.MovedAt = now;
+                return false;
+            }
+            var shouldBeMoving = PlayerBotService.Enabled && bot.Alive && bot.Map != null && bot.Map != Map.Internal
+                && bot.Combatant == null && String.IsNullOrEmpty(bot.DungeonReturnName)
+                && bot.NextAction <= now && bot.Destination != Point3D.Zero && !bot.InRange(bot.Destination, 2);
+            return shouldBeMoving && now - sample.MovedAt >= TimeSpan.FromSeconds(45);
         }
 
         // These are radar-color terrain maps sampled at one pixel per eight UO
