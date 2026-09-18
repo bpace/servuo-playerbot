@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using Server.Mobiles;
 
 namespace Server.CustomBots
 {
@@ -238,6 +239,13 @@ namespace Server.CustomBots
         internal static void RefreshSnapshot()
         {
             var bots = PlayerBotService.FindBots();
+            var players = new List<PlayerMobile>();
+            foreach (Mobile mobile in World.Mobiles.Values)
+            {
+                var player = mobile as PlayerMobile;
+                if (player != null && player.Player && !player.Deleted && !player.IsStaff() && player.NetState != null)
+                    players.Add(player);
+            }
             var now = DateTime.UtcNow;
             var liveSerials = new HashSet<Serial>();
             var json = new StringBuilder(512 + bots.Count * 160);
@@ -276,6 +284,17 @@ namespace Server.CustomBots
                     .Append(",\"stuck\":").Append(IsStuck(bot, now) ? "true" : "false")
                     .Append(",\"destination\":\"").Append(Escape(bot.DestinationName)).Append("\"}");
             }
+            json.Append("],\"players\":[");
+            for (var i = 0; i < players.Count; i++)
+            {
+                var player = players[i];
+                if (i > 0) json.Append(',');
+                json.Append("{\"name\":\"").Append(Escape(player.Name)).Append("\",\"map\":\"")
+                    .Append(Escape(player.Map == null ? "Internal" : player.Map.Name))
+                    .Append("\",\"x\":").Append(player.X).Append(",\"y\":").Append(player.Y)
+                    .Append(",\"alive\":").Append(player.Alive ? "true" : "false").Append("}");
+            }
+            json.Append("]");
             var staleSerials = new List<Serial>();
             foreach (var serial in BotMotion.Keys) if (!liveSerials.Contains(serial)) staleSerials.Add(serial);
             foreach (var serial in staleSerials) BotMotion.Remove(serial);
