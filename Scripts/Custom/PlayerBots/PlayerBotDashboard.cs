@@ -298,7 +298,7 @@ namespace Server.CustomBots
             var staleSerials = new List<Serial>();
             foreach (var serial in BotMotion.Keys) if (!liveSerials.Contains(serial)) staleSerials.Add(serial);
             foreach (var serial in staleSerials) BotMotion.Remove(serial);
-            json.Append("],\"events\":[");
+            json.Append(",\"events\":[");
             var events = PlayerBotService.GetEvents();
             for (var i = 0; i < events.Count; i++)
             {
