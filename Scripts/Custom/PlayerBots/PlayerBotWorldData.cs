@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
+using Server.Regions;
 
 namespace Server.CustomBots
 {
@@ -249,6 +250,11 @@ namespace Server.CustomBots
                 message = "Spawn needs a name and a point inside " + map.Name + ".";
                 return false;
             }
+            if (String.Equals(role, "PlayerKiller", StringComparison.OrdinalIgnoreCase) && !IsLegalRoadPkLocation(map, x, y, z))
+            {
+                message = "Road PK spawns must be at an unguarded Felucca location.";
+                return false;
+            }
             count = Math.Max(1, Math.Min(50, count));
             lock (Sync)
             {
@@ -263,6 +269,14 @@ namespace Server.CustomBots
             }
             message = "Spawn definition saved. It is data only until the spawn generator is added.";
             return true;
+        }
+
+        internal static bool IsLegalRoadPkLocation(Map map, int x, int y, int z)
+        {
+            if (map != Map.Felucca || map.Rules != MapRules.FeluccaRules) return false;
+            var region = Region.Find(new Point3D(x, y, z), map);
+            var guarded = region == null ? null : region.GetRegion(typeof(GuardedRegion)) as GuardedRegion;
+            return guarded == null || guarded.IsDisabled();
         }
 
         public static bool AddDungeonLink(string name, string facet, string entranceName, string interiorName, out string message)

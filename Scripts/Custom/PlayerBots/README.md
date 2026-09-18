@@ -12,4 +12,8 @@ The mod also provides a LAN dashboard with no browser token, URL secret, cookie,
 
 It shows the bot census, a coordinate map view, current target, bot state, and the recent event log. It queues enable, disable, population, spawn, and remove requests for the shard's own PlayerBots timer, so HTTP request threads never modify the game world directly. Keep the dashboard on a private network. The canvas is a live coordinate view, not a copy of Ultima Online map art.
 
+## Road PKs
+
+Choose `Player Killer` in the stored-spawn editor and save an explicitly authored road location. The server accepts that role only at an unguarded Felucca point, revalidates it before materializing, and the `Spawn road PKs` action creates only those authored definitions. PK bots target real nearby players, never other PlayerBots, and use the normal ServUO combat and notoriety path. They remain inert until PlayerBots are enabled. Trammel, other protected facets, and guarded Felucca locations are rejected.
+
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.

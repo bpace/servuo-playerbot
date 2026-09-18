@@ -9,7 +9,8 @@ namespace Server.CustomBots
         Traveler,
         Banker,
         Adventurer,
-        Townie
+        Townie,
+        PlayerKiller
     }
 
     // A persistent PlayerMobile without a NetState. It deliberately uses
@@ -71,6 +72,15 @@ namespace Server.CustomBots
             Skills[SkillName.Anatomy].Base = 65;
             Skills[SkillName.Healing].Base = 60;
             AddToBackpack(new Gold(Utility.RandomMinMax(100, 450)));
+            if (role == PlayerBotRole.PlayerKiller)
+            {
+                RawStr = 100;
+                RawDex = 100;
+                Skills[SkillName.Swords].Base = 90;
+                Skills[SkillName.Tactics].Base = 90;
+                Skills[SkillName.Anatomy].Base = 80;
+                AddItem(new Katana());
+            }
             Destination = Point3D.Zero;
             DestinationName = "";
             SpawnSource = "";
