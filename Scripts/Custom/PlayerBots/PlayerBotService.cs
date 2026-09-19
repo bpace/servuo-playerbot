@@ -287,7 +287,18 @@ namespace Server.CustomBots
             if (DateTime.UtcNow < bot.NextAction) return;
 
             EnsureDestination(bot);
-            if (bot.InRange(bot.Destination, 2))
+            var travelTarget = bot.Destination;
+            if (bot.RoutePoints != null && bot.RouteIndex < bot.RoutePoints.Count)
+            {
+                if (bot.InRange(bot.RoutePoints[bot.RouteIndex], 2))
+                {
+                    bot.RouteIndex++;
+                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+                    return;
+                }
+                travelTarget = bot.RoutePoints[bot.RouteIndex];
+            }
+            else if (bot.InRange(bot.Destination, 2))
             {
                 Arrive(bot);
                 return;
@@ -295,7 +306,8 @@ namespace Server.CustomBots
 
             // Long hops become a visible public-moongate trip. This avoids
             // teleporting every short walk while keeping the shard populated.
-            if (bot.GetDistanceToSqrt(bot.Destination) > 120 && Utility.RandomDouble() < 0.08)
+            if ((bot.RoutePoints == null || bot.RouteIndex >= bot.RoutePoints.Count)
+                && bot.GetDistanceToSqrt(bot.Destination) > 120 && Utility.RandomDouble() < 0.08)
             {
                 bot.Say("I am taking the moongate to " + bot.DestinationName + ".");
                 bot.MoveToWorld(bot.Destination, bot.Map);
@@ -304,9 +316,11 @@ namespace Server.CustomBots
                 return;
             }
 
-            var direction = bot.GetDirectionTo(bot.Destination) | Direction.Running;
+            var direction = bot.GetDirectionTo(travelTarget) | Direction.Running;
             if (!bot.Move(direction))
             {
+                if (bot.RoutePoints != null) bot.RoutePoints.Clear();
+                bot.RouteIndex = 0;
                 AssignDestination(bot);
             }
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(800);
@@ -454,11 +468,14 @@ namespace Server.CustomBots
 
         private static void AssignDestination(PlayerBot bot)
         {
+            if (bot.RoutePoints != null) bot.RoutePoints.Clear();
+            bot.RouteIndex = 0;
             var authored = PlayerBotWorldData.RandomDestination(bot.Map);
             if (authored != null)
             {
                 bot.Destination = new Point3D(authored.X, authored.Y, authored.Z);
                 bot.DestinationName = authored.Name;
+                PlayerBotWorldData.TryPlanRoute(bot, authored);
                 return;
             }
             var city = RandomCity(bot.Map);

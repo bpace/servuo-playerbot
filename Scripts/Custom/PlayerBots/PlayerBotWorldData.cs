@@ -43,6 +43,10 @@ namespace Server.CustomBots
         [XmlAttribute] public int X;
         [XmlAttribute] public int Y;
         [XmlAttribute] public int Z;
+
+        [XmlArray("Connects")]
+        [XmlArrayItem("Name")]
+        public List<string> Connects = new List<string>();
     }
 
     public sealed class PlayerBotDestination
@@ -53,6 +57,7 @@ namespace Server.CustomBots
         [XmlAttribute] public int X;
         [XmlAttribute] public int Y;
         [XmlAttribute] public int Z;
+        [XmlAttribute] public string NearestWaypoint;
     }
 
     public sealed class PlayerBotZone
@@ -206,9 +211,119 @@ namespace Server.CustomBots
             {
                 var matches = new List<PlayerBotDestination>();
                 foreach (var destination in _data.Destinations)
-                    if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase) && !String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
+                    if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        && !String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)
+                        && !String.Equals(destination.Kind, "DungeonAscend", StringComparison.OrdinalIgnoreCase)
+                        && !String.Equals(destination.Kind, "DungeonDescend", StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
                 return matches.Count == 0 ? null : matches[Utility.Random(matches.Count)];
             }
+        }
+
+        // The graph import is data-only.  This is the single seam callers use
+        // to turn that data into a safe, short-leg plan for a particular AoS
+        // facet.  Every node and endpoint is checked against that facet before
+        // it can enter a route; the identical XY coordinate system alone is
+        // not treated as proof of matching statics or collision.
+        internal static bool TryPlanRoute(PlayerBot bot, PlayerBotDestination destination)
+        {
+            if (bot == null || destination == null || bot.Map == null || bot.Map == Map.Internal)
+                return false;
+
+            lock (Sync)
+            {
+                var map = bot.Map;
+                if (!String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                    || !IsWalkable(map, destination.X, destination.Y, destination.Z))
+                    return false;
+
+                var nodes = new Dictionary<string, PlayerBotWaypoint>(StringComparer.OrdinalIgnoreCase);
+                foreach (var waypoint in _data.Waypoints)
+                {
+                    if (!String.Equals(waypoint.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        || !IsWalkable(map, waypoint.X, waypoint.Y, waypoint.Z))
+                        continue;
+                    nodes[waypoint.Name] = waypoint;
+                }
+                if (nodes.Count == 0) return false;
+
+                PlayerBotWaypoint start = FindNearest(nodes.Values, bot.Location, 64);
+                PlayerBotWaypoint end = String.IsNullOrEmpty(destination.NearestWaypoint) ? null : FindNode(nodes, destination.NearestWaypoint);
+                if (end == null) end = FindNearest(nodes.Values, new Point3D(destination.X, destination.Y, destination.Z), 64);
+                if (start == null || end == null) return false;
+
+                var previous = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var pending = new Queue<string>();
+                seen.Add(start.Name);
+                pending.Enqueue(start.Name);
+                while (pending.Count > 0 && !seen.Contains(end.Name))
+                {
+                    var name = pending.Dequeue();
+                    var current = FindNode(nodes, name);
+                    if (current == null) continue;
+                    foreach (var neighborName in current.Connects)
+                    {
+                        var neighbor = FindNode(nodes, neighborName);
+                        if (neighbor == null || seen.Contains(neighbor.Name) || !IsShortLeg(current, neighbor)) continue;
+                        seen.Add(neighbor.Name);
+                        previous[neighbor.Name] = current.Name;
+                        pending.Enqueue(neighbor.Name);
+                    }
+                }
+                if (!seen.Contains(end.Name)) return false;
+
+                var reverse = new List<PlayerBotWaypoint>();
+                var cursor = end.Name;
+                while (cursor != null)
+                {
+                    var current = FindNode(nodes, cursor);
+                    if (current == null) return false;
+                    reverse.Add(current);
+                    string parent;
+                    if (!previous.TryGetValue(cursor, out parent)) break;
+                    cursor = parent;
+                }
+                reverse.Reverse();
+                bot.RoutePoints.Clear();
+                foreach (var point in reverse) bot.RoutePoints.Add(new Point3D(point.X, point.Y, point.Z));
+                bot.RoutePoints.Add(new Point3D(destination.X, destination.Y, destination.Z));
+                bot.RouteIndex = 0;
+                return bot.RoutePoints.Count > 0;
+            }
+        }
+
+        private static PlayerBotWaypoint FindNode(Dictionary<string, PlayerBotWaypoint> nodes, string name)
+        {
+            PlayerBotWaypoint node;
+            return name != null && nodes.TryGetValue(name, out node) ? node : null;
+        }
+
+        private static PlayerBotWaypoint FindNearest(IEnumerable<PlayerBotWaypoint> nodes, Point3D point, int maximumDistance)
+        {
+            PlayerBotWaypoint best = null;
+            var bestSquared = maximumDistance * maximumDistance;
+            foreach (var node in nodes)
+            {
+                var dx = node.X - point.X;
+                var dy = node.Y - point.Y;
+                var distance = dx * dx + dy * dy;
+                if (distance > bestSquared) continue;
+                bestSquared = distance;
+                best = node;
+            }
+            return best;
+        }
+
+        private static bool IsShortLeg(PlayerBotWaypoint left, PlayerBotWaypoint right)
+        {
+            var dx = left.X - right.X;
+            var dy = left.Y - right.Y;
+            return dx * dx + dy * dy <= 38 * 38;
+        }
+
+        private static bool IsWalkable(Map map, int x, int y, int z)
+        {
+            return map != null && x >= 0 && y >= 0 && x < map.Width && y < map.Height && map.CanFit(x, y, z, 16, false, false);
         }
 
         internal static PlayerBotDestination GetDestination(string name, Map map)
