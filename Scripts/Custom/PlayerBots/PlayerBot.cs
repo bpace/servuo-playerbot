@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Server.Items;
 using Server.Mobiles;
 
@@ -43,6 +44,14 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime DungeonReturnAt { get; set; }
 
+        // A route is an ordered set of short, authored legs.  It is kept on
+        // the bot so the graph can be rebuilt without losing its current
+        // progress, and so no long-distance movement is silently converted
+        // into a moongate hop.
+        public List<Point3D> RoutePoints { get; private set; }
+
+        public int RouteIndex { get; set; }
+
         [Constructable]
         public PlayerBot() : this(PlayerBotRole.Traveler)
         {
@@ -81,6 +90,8 @@ namespace Server.CustomBots
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
+            RoutePoints = new List<Point3D>();
+            RouteIndex = 0;
         }
 
         public PlayerBot(Serial serial) : base(serial)
@@ -102,7 +113,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(2);
+            writer.Write(3);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -111,6 +122,10 @@ namespace Server.CustomBots
             writer.Write(SpawnSource);
             writer.Write(DungeonReturnName);
             writer.Write(DungeonReturnAt);
+            writer.Write(RoutePoints == null ? 0 : RoutePoints.Count);
+            if (RoutePoints != null)
+                foreach (var point in RoutePoints) writer.Write(point);
+            writer.Write(RouteIndex);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -125,6 +140,14 @@ namespace Server.CustomBots
             SpawnSource = version >= 1 ? reader.ReadString() ?? "" : "";
             DungeonReturnName = version >= 2 ? reader.ReadString() ?? "" : "";
             DungeonReturnAt = version >= 2 ? reader.ReadDateTime() : DateTime.MinValue;
+            RoutePoints = new List<Point3D>();
+            if (version >= 3)
+            {
+                var count = reader.ReadInt();
+                for (var i = 0; i < count; i++) RoutePoints.Add(reader.ReadPoint3D());
+                RouteIndex = reader.ReadInt();
+            }
+            else RouteIndex = 0;
             Player = false;
         }
     }
