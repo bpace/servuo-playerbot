@@ -69,6 +69,7 @@ namespace Server.CustomBots
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
             EventSink.WorldLoad += OnWorldLoad;
             PlayerBotWorldData.Initialize();
+            Enabled = PlayerBotWorldData.IsEnabled;
             _timer = Timer.DelayCall(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2), Tick);
             Timer.DelayCall(TimeSpan.FromSeconds(10), RestoreFacetLocations);
             PlayerBotDashboard.Start();
@@ -140,6 +141,7 @@ namespace Server.CustomBots
             if (action == "on" || action == "off")
             {
                 Enabled = action == "on";
+                PlayerBotWorldData.SetEnabled(Enabled);
                 if (Enabled) ReconcilePopulation();
                 RecordEvent("GM turned PlayerBots " + (Enabled ? "on" : "off") + ".");
                 e.Mobile.SendMessage("PlayerBots are {0}.", Enabled ? "on" : "off");
@@ -382,6 +384,12 @@ namespace Server.CustomBots
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(8);
                 return;
             }
+            if (IsWanderDestination(bot))
+            {
+                AssignDestination(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(8, 20));
+                return;
+            }
             if (!String.IsNullOrEmpty(bot.DungeonReturnName))
             {
                 if (DateTime.UtcNow < bot.DungeonReturnAt)
@@ -428,6 +436,11 @@ namespace Server.CustomBots
             {
                 SayAtInterval(bot, "travel", "Safe travels from " + bot.DestinationName + ".");
             }
+            if (TryAssignLocalWander(bot))
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(3, 10));
+                return;
+            }
             AssignDestination(bot);
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(8, 25));
         }
@@ -451,6 +464,36 @@ namespace Server.CustomBots
             var city = RandomCity(bot.Map);
             bot.Destination = new Point3D(city.Location.X + Utility.RandomMinMax(-8, 8), city.Location.Y + Utility.RandomMinMax(-8, 8), city.Location.Z);
             bot.DestinationName = city.Name;
+        }
+
+        // This is deliberately local wandering, not fake pathfinding. It
+        // spreads arrivals around an actual walkable town area while authored
+        // waypoints and a true road graph remain separate work.
+        private static bool TryAssignLocalWander(PlayerBot bot)
+        {
+            if (bot.Map == null || bot.Map == Map.Internal)
+                return false;
+
+            for (var attempt = 0; attempt < 12; attempt++)
+            {
+                var x = bot.X + Utility.RandomMinMax(-24, 24);
+                var y = bot.Y + Utility.RandomMinMax(-24, 24);
+                var z = bot.Map.GetAverageZ(x, y);
+                if (!bot.Map.CanFit(x, y, z, 16, false, false))
+                    continue;
+
+                bot.Destination = new Point3D(x, y, z);
+                bot.DestinationName = "Wander: " + bot.DestinationName;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsWanderDestination(PlayerBot bot)
+        {
+            return !String.IsNullOrEmpty(bot.DestinationName)
+                && bot.DestinationName.StartsWith("Wander: ", StringComparison.Ordinal);
         }
 
         public static void ReportMurder(PlayerBot victim)
@@ -477,12 +520,14 @@ namespace Server.CustomBots
             if (action == "enable")
             {
                 Enabled = true;
+                PlayerBotWorldData.SetEnabled(true);
                 ReconcilePopulation();
                 RecordEvent("Dashboard turned PlayerBots on.");
             }
             else if (action == "disable")
             {
                 Enabled = false;
+                PlayerBotWorldData.SetEnabled(false);
                 RecordEvent("Dashboard turned PlayerBots off.");
             }
             else if (action == "population")
