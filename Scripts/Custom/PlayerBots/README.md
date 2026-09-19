@@ -10,7 +10,7 @@ Use `[PlayerBots status`, `[PlayerBots spawn 5`, `[PlayerBots population 50`, `[
 
 The mod also provides a LAN dashboard with no browser token, URL secret, cookie, or browser storage. On first startup it creates `Config/PlayerBotsDashboard.cfg`; its `BindAddress`, `Port`, and `AllowedAddress` determine access. Defaults are `192.168.50.139`, port `8081`, and the shard owner's LAN address `192.168.50.81`. Open `http://192.168.50.139:8081/` from that allowed device.
 
-It shows the bot census, a coordinate map view, current target, bot state, and the recent event log. It queues enable, disable, population, spawn, and remove requests for the shard's own PlayerBots timer, so HTTP request threads never modify the game world directly. Keep the dashboard on a private network. The canvas is a live coordinate view, not a copy of Ultima Online map art.
+It shows the bot census, a coordinate map view, current target, bot state, and the recent event log. Hovering the map shows exact facet X/Y coordinates and clicking uses the same zoom-safe conversion to populate the route editor. The optional reference-city layer is visual only and never creates authored route data. It queues enable, disable, population, spawn, and remove requests for the shard's own PlayerBots timer, so HTTP request threads never modify the game world directly. Keep the dashboard on a private network. The canvas is a live coordinate view, not a copy of Ultima Online map art.
 
 ## Road PKs
 
