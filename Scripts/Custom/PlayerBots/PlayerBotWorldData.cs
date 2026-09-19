@@ -12,6 +12,9 @@ namespace Server.CustomBots
     [XmlRoot("PlayerBotWorld")]
     public sealed class PlayerBotWorldDataFile
     {
+        [XmlAttribute("enabled")]
+        public bool Enabled;
+
         [XmlArray("Waypoints")]
         [XmlArrayItem("Waypoint")]
         public List<PlayerBotWaypoint> Waypoints = new List<PlayerBotWaypoint>();
@@ -125,6 +128,23 @@ namespace Server.CustomBots
                     _data = new PlayerBotWorldDataFile();
                     Console.WriteLine("[PlayerBots] Could not load world-data.xml: " + e.Message);
                 }
+            }
+        }
+
+        public static bool IsEnabled
+        {
+            get
+            {
+                lock (Sync) return _data.Enabled;
+            }
+        }
+
+        public static void SetEnabled(bool enabled)
+        {
+            lock (Sync)
+            {
+                _data.Enabled = enabled;
+                SaveLocked();
             }
         }
 
