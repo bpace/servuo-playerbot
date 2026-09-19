@@ -56,17 +56,9 @@ namespace Server.CustomBots
             // and skill behavior.
             Player = false;
             BotRole = role;
-            Name = PlayerBotNames.Next();
-            Female = Utility.RandomBool();
-            Body = Female ? 0x191 : 0x190;
-            Hue = Utility.RandomSkinHue();
-            SpeechHue = Utility.RandomMinMax(0x3B2, 0x59);
             RawStr = Utility.RandomMinMax(80, 100);
             RawDex = Utility.RandomMinMax(80, 100);
             RawInt = Utility.RandomMinMax(40, 70);
-            Hits = HitsMax;
-            Stam = StamMax;
-            Mana = ManaMax;
             Skills[SkillName.Swords].Base = 75;
             Skills[SkillName.Tactics].Base = 75;
             Skills[SkillName.Anatomy].Base = 65;
@@ -79,8 +71,11 @@ namespace Server.CustomBots
                 Skills[SkillName.Swords].Base = 90;
                 Skills[SkillName.Tactics].Base = 90;
                 Skills[SkillName.Anatomy].Base = 80;
-                AddItem(new Katana());
             }
+            Hits = HitsMax;
+            Stam = StamMax;
+            Mana = ManaMax;
+            PlayerBotPersonas.ApplyNew(this);
             Destination = Point3D.Zero;
             DestinationName = "";
             SpawnSource = "";
@@ -134,18 +129,4 @@ namespace Server.CustomBots
         }
     }
 
-    internal static class PlayerBotNames
-    {
-        private static readonly string[] Names =
-        {
-            "Alden", "Aric", "Brenna", "Celia", "Corwin", "Darian", "Elise", "Fiona",
-            "Gareth", "Hilda", "Ivor", "Jessa", "Kara", "Loric", "Mira", "Nolan",
-            "Orin", "Petra", "Quinn", "Rhea", "Silas", "Tessa", "Ulric", "Vera"
-        };
-
-        public static string Next()
-        {
-            return Names[Utility.Random(Names.Length)] + " " + Utility.RandomMinMax(10, 999);
-        }
-    }
 }
