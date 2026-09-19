@@ -407,8 +407,14 @@ namespace Server.CustomBots
         private static bool IsAcceptedLeg(string facet, PlayerBotWaypoint from, PlayerBotWaypoint to)
         {
             RouteAudit audit;
-            if (!RouteAudits.TryGetValue(facet, out audit) || !audit.Complete) return true;
+            if (!RouteAudits.TryGetValue(facet, out audit) || !audit.Complete) return false;
             return audit.Accepted.Contains(LegKey(from, to));
+        }
+
+        internal static void StartFacetAudits()
+        {
+            StartRouteAudit(Map.Felucca);
+            StartRouteAudit(Map.Trammel);
         }
 
         private static string LegKey(PlayerBotWaypoint from, PlayerBotWaypoint to)

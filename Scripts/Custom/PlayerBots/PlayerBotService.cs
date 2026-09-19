@@ -69,6 +69,7 @@ namespace Server.CustomBots
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
             EventSink.WorldLoad += OnWorldLoad;
             PlayerBotWorldData.Initialize();
+            PlayerBotWorldData.StartFacetAudits();
             Enabled = PlayerBotWorldData.IsEnabled;
             _timer = Timer.DelayCall(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2), Tick);
             Timer.DelayCall(TimeSpan.FromSeconds(10), RestoreFacetLocations);
@@ -591,6 +592,7 @@ namespace Server.CustomBots
             else if (action == "reloadworld")
             {
                 PlayerBotWorldData.Reload();
+                PlayerBotWorldData.StartFacetAudits();
                 RecordEvent("Dashboard reloaded PlayerBot world data.");
             }
             else if (action == "audit")
