@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
 using Server.Regions;
+using CalcMoves = Server.Movement.Movement;
 
 namespace Server.CustomBots
 {
@@ -98,9 +99,30 @@ namespace Server.CustomBots
 
     public static class PlayerBotWorldData
     {
+        private sealed class RouteLeg
+        {
+            public PlayerBotWaypoint From;
+            public PlayerBotWaypoint To;
+        }
+
+        private sealed class RouteAudit
+        {
+            public string Facet;
+            public int Nodes;
+            public int InvalidNodes;
+            public int Edges;
+            public int ValidEdges;
+            public int InvalidEdges;
+            public int NextLeg;
+            public bool Complete;
+            public readonly List<RouteLeg> Pending = new List<RouteLeg>();
+            public readonly HashSet<string> Accepted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
         private static readonly object Sync = new object();
         private static readonly XmlSerializer Serializer = new XmlSerializer(typeof(PlayerBotWorldDataFile));
         private static PlayerBotWorldDataFile _data = new PlayerBotWorldDataFile();
+        private static readonly Dictionary<string, RouteAudit> RouteAudits = new Dictionary<string, RouteAudit>(StringComparer.OrdinalIgnoreCase);
 
         private static string PathName
         {
@@ -264,7 +286,7 @@ namespace Server.CustomBots
                     foreach (var neighborName in current.Connects)
                     {
                         var neighbor = FindNode(nodes, neighborName);
-                        if (neighbor == null || seen.Contains(neighbor.Name) || !IsShortLeg(current, neighbor)) continue;
+                        if (neighbor == null || seen.Contains(neighbor.Name) || !IsShortLeg(current, neighbor) || !IsAcceptedLeg(map.Name, current, neighbor)) continue;
                         seen.Add(neighbor.Name);
                         previous[neighbor.Name] = current.Name;
                         pending.Enqueue(neighbor.Name);
@@ -319,6 +341,109 @@ namespace Server.CustomBots
             var dx = left.X - right.X;
             var dy = left.Y - right.Y;
             return dx * dx + dy * dy <= 38 * 38;
+        }
+
+        // Starts a read-only facet audit. It never rewrites imported data:
+        // after completion, only verified legs enter route plans.
+        internal static string StartRouteAudit(Map map)
+        {
+            if (map == null || map == Map.Internal) return "No playable facet selected.";
+            lock (Sync)
+            {
+                var nodes = new Dictionary<string, PlayerBotWaypoint>(StringComparer.OrdinalIgnoreCase);
+                var audit = new RouteAudit { Facet = map.Name };
+                foreach (var point in _data.Waypoints)
+                {
+                    if (!String.Equals(point.Facet, map.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                    audit.Nodes++;
+                    if (!IsWalkable(map, point.X, point.Y, point.Z)) { audit.InvalidNodes++; continue; }
+                    nodes[point.Name] = point;
+                }
+                foreach (var point in nodes.Values)
+                {
+                    foreach (var neighborName in point.Connects)
+                    {
+                        audit.Edges++;
+                        var neighbor = FindNode(nodes, neighborName);
+                        if (neighbor == null || !IsShortLeg(point, neighbor)) audit.InvalidEdges++;
+                        else audit.Pending.Add(new RouteLeg { From = point, To = neighbor });
+                    }
+                }
+                RouteAudits[map.Name] = audit;
+                return "Queued " + map.Name + " route audit: " + audit.Nodes + " nodes and " + audit.Edges + " directed legs.";
+            }
+        }
+
+        // Called by the existing game timer. The small budget prevents a full
+        // 8,554-leg audit from stalling the world thread.
+        internal static string AdvanceRouteAudit(int budget)
+        {
+            lock (Sync)
+            {
+                foreach (var audit in RouteAudits.Values)
+                {
+                    if (audit.Complete) continue;
+                    var map = PlayerBotService.GetMap(audit.Facet);
+                    for (var i = 0; i < budget && audit.NextLeg < audit.Pending.Count; i++, audit.NextLeg++)
+                    {
+                        var leg = audit.Pending[audit.NextLeg];
+                        if (IsDirectLegWalkable(map, leg.From, leg.To))
+                        {
+                            audit.ValidEdges++;
+                            audit.Accepted.Add(LegKey(leg.From, leg.To));
+                        }
+                        else audit.InvalidEdges++;
+                    }
+                    if (audit.NextLeg >= audit.Pending.Count)
+                    {
+                        audit.Complete = true;
+                        return audit.Facet + " route audit complete: " + audit.ValidEdges + "/" + audit.Edges + " directed legs accepted; " + audit.InvalidNodes + " nodes and " + audit.InvalidEdges + " legs rejected.";
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static bool IsAcceptedLeg(string facet, PlayerBotWaypoint from, PlayerBotWaypoint to)
+        {
+            RouteAudit audit;
+            if (!RouteAudits.TryGetValue(facet, out audit) || !audit.Complete) return true;
+            return audit.Accepted.Contains(LegKey(from, to));
+        }
+
+        private static string LegKey(PlayerBotWaypoint from, PlayerBotWaypoint to)
+        {
+            return from.Name + "\n" + to.Name;
+        }
+
+        // Replays a leg tile by tile through the collision and diagonal check
+        // used by ServUO movement. This mirrors the bot's direct leg walking.
+        private static bool IsDirectLegWalkable(Map map, PlayerBotWaypoint from, PlayerBotWaypoint to)
+        {
+            if (!IsWalkable(map, from.X, from.Y, from.Z) || !IsWalkable(map, to.X, to.Y, to.Z)) return false;
+            var cursor = new Point3D(from.X, from.Y, from.Z);
+            var source = new Point3D(from.X, from.Y, from.Z);
+            var safety = 0;
+            while ((cursor.X != to.X || cursor.Y != to.Y) && safety++ < 40)
+            {
+                var direction = DirectionTo(cursor, new Point3D(to.X, to.Y, to.Z));
+                int nextZ;
+                if (!CalcMoves.CheckMovement(source, map, cursor, direction, out nextZ)) return false;
+                var x = cursor.X;
+                var y = cursor.Y;
+                CalcMoves.Offset(direction, ref x, ref y);
+                cursor = new Point3D(x, y, nextZ);
+            }
+            return cursor.X == to.X && cursor.Y == to.Y && Math.Abs(cursor.Z - to.Z) < 16;
+        }
+
+        private static Direction DirectionTo(Point3D from, Point3D to)
+        {
+            var dx = Math.Sign(to.X - from.X);
+            var dy = Math.Sign(to.Y - from.Y);
+            if (dx > 0) return dy < 0 ? Direction.Right : dy > 0 ? Direction.Down : Direction.East;
+            if (dx < 0) return dy < 0 ? Direction.Up : dy > 0 ? Direction.Left : Direction.West;
+            return dy < 0 ? Direction.North : Direction.South;
         }
 
         private static bool IsWalkable(Map map, int x, int y, int z)
