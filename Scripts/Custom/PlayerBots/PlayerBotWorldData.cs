@@ -611,6 +611,23 @@ namespace Server.CustomBots
                     json.Append("{\"n\":\"").Append(Escape(point.Name)).Append("\",\"f\":\"").Append(Escape(point.Facet))
                         .Append("\",\"x\":").Append(point.X).Append(",\"y\":").Append(point.Y).Append("}");
                 }
+                json.Append("],\"roadData\":[");
+                var firstRoad = true;
+                var waypointIndex = new Dictionary<string, PlayerBotWaypoint>(StringComparer.OrdinalIgnoreCase);
+                foreach (var waypoint in _data.Waypoints) waypointIndex[waypoint.Facet + "\n" + waypoint.Name] = waypoint;
+                foreach (var point in _data.Waypoints)
+                {
+                    foreach (var neighborName in point.Connects)
+                    {
+                        PlayerBotWaypoint neighbor;
+                        if (!waypointIndex.TryGetValue(point.Facet + "\n" + neighborName, out neighbor)
+                            || !IsShortLeg(point, neighbor) || !IsAcceptedLeg(point.Facet, point, neighbor)) continue;
+                        if (!firstRoad) json.Append(',');
+                        firstRoad = false;
+                        json.Append("{\"f\":\"").Append(Escape(point.Facet)).Append("\",\"x\":").Append(point.X)
+                            .Append(",\"y\":").Append(point.Y).Append(",\"a\":").Append(neighbor.X).Append(",\"b\":").Append(neighbor.Y).Append('}');
+                    }
+                }
                 json.Append("],\"destinationData\":[");
                 for (var i = 0; i < _data.Destinations.Count; i++)
                 {
