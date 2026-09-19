@@ -47,7 +47,11 @@ namespace Server.CustomBots
         // restart upgrades them without replacing GM-added equipment later.
         public static void EnsureAppearance(PlayerBot bot)
         {
-            if (bot == null || bot.Deleted || HasOutfit(bot))
+            if (bot == null || bot.Deleted)
+                return;
+
+            RepairLegLayer(bot);
+            if (HasOutfit(bot))
                 return;
 
             if (HasLegacyNumberedName(bot.Name))
@@ -111,10 +115,9 @@ namespace Server.CustomBots
         {
             var hue = RandomHue(TravelHues);
             WearIfEmpty(bot, Layer.Shirt, new Shirt(hue));
-            WearIfEmpty(bot, Layer.Pants, new LongPants(RandomHue(CivilianHues)));
             WearIfEmpty(bot, Layer.Shoes, new Boots());
             WearIfEmpty(bot, Layer.InnerTorso, new LeatherChest());
-            WearIfEmpty(bot, Layer.InnerLegs, new LeatherLegs());
+            WearIfEmpty(bot, Layer.Pants, new LeatherLegs());
             WearIfEmpty(bot, Layer.Cloak, new Cloak(hue));
             EquipWeapon(bot, Utility.RandomBool() ? (Item)new Katana() : new Longsword());
             MaybeMount(bot);
@@ -124,10 +127,9 @@ namespace Server.CustomBots
         {
             var hue = RandomHue(DarkHues);
             WearIfEmpty(bot, Layer.Shirt, new Shirt(hue));
-            WearIfEmpty(bot, Layer.Pants, new LongPants(0x455));
             WearIfEmpty(bot, Layer.Shoes, new Boots());
             WearIfEmpty(bot, Layer.InnerTorso, new LeatherChest());
-            WearIfEmpty(bot, Layer.InnerLegs, new LeatherLegs());
+            WearIfEmpty(bot, Layer.Pants, new LeatherLegs());
             WearIfEmpty(bot, Layer.Cloak, new Cloak(0x455));
             EquipWeapon(bot, new Katana());
         }
@@ -161,6 +163,38 @@ namespace Server.CustomBots
                 || bot.FindItemOnLayer(Layer.Pants) != null
                 || bot.FindItemOnLayer(Layer.InnerTorso) != null
                 || bot.FindItemOnLayer(Layer.OuterTorso) != null;
+        }
+
+        private static void RepairLegLayer(PlayerBot bot)
+        {
+            if (bot.BotRole != PlayerBotRole.Adventurer && bot.BotRole != PlayerBotRole.PlayerKiller)
+                return;
+
+            var hasLeatherLegs = false;
+            foreach (Item item in bot.Items)
+            {
+                if (item is LeatherLegs)
+                {
+                    hasLeatherLegs = true;
+                    break;
+                }
+            }
+
+            if (!hasLeatherLegs)
+                return;
+
+            Item longPants = null;
+            foreach (Item item in bot.Items)
+            {
+                if (item is LongPants)
+                {
+                    longPants = item;
+                    break;
+                }
+            }
+
+            if (longPants != null)
+                longPants.Delete();
         }
 
         private static string NextName(bool female)
