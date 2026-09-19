@@ -86,6 +86,7 @@ namespace Server.CustomBots
             foreach (var bot in FindBots())
             {
                 bot.Player = false;
+                PlayerBotPersonas.EnsureAppearance(bot);
                 if (bot.Map == Map.Internal)
                 {
                     // Legacy v1 bots were saved as Player=true and lost their
