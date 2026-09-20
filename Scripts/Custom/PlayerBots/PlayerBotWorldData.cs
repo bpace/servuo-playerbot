@@ -307,9 +307,22 @@ namespace Server.CustomBots
                     cursor = parent;
                 }
                 reverse.Reverse();
+
+                // A graph node merely gets us close to a live endpoint.  Do
+                // not turn that proximity into an unchecked straight-line
+                // tail: entrances often sit behind rocks, walls, or a pad
+                // that requires a short detour from the road node.
+                var route = new List<Point3D>();
+                if (!TryAppendLocalPath(map, bot.Location, new Point3D(start.X, start.Y, start.Z), route))
+                    return false;
+                foreach (var point in reverse)
+                    AppendRoutePoint(route, new Point3D(point.X, point.Y, point.Z));
+                if (!TryAppendLocalPath(map, new Point3D(end.X, end.Y, end.Z),
+                    new Point3D(destination.X, destination.Y, destination.Z), route))
+                    return false;
+
                 bot.RoutePoints.Clear();
-                foreach (var point in reverse) bot.RoutePoints.Add(new Point3D(point.X, point.Y, point.Z));
-                bot.RoutePoints.Add(new Point3D(destination.X, destination.Y, destination.Z));
+                foreach (var point in route) bot.RoutePoints.Add(point);
                 bot.RouteIndex = 0;
                 return bot.RoutePoints.Count > 0;
             }
@@ -466,15 +479,17 @@ namespace Server.CustomBots
                 var routeLegs = 0;
                 string returnPad = null;
                 var returnLegs = 0;
+                bool approach;
                 lock (Sync)
                 {
+                    approach = HasVerifiedGraphApproachLocked(map, new Point3D(matched.X, matched.Y, matched.Z));
                     interior = FindVerifiedDungeonInteriorLocked(map, entrance, matched.PointDest, out routeLegs);
                     if (interior != null && destinationMap == map)
                         returnPad = FindVerifiedDungeonReturnPadLocked(map, entrance, matched.PointDest, out returnLegs);
                 }
                 lines.Add(entrance.Name + " | pad=" + matched.X + "," + matched.Y + "," + matched.Z
                     + " active=" + matched.Active + " | destination=" + matched.PointDest.X + "," + matched.PointDest.Y + "," + matched.PointDest.Z
-                    + "@" + destinationMap.Name + " | interior=" + (interior ?? "none")
+                    + "@" + destinationMap.Name + " | approach=" + approach + " | interior=" + (interior ?? "none")
                     + (interior == null ? "" : " routeLegs=" + routeLegs)
                     + (returnPad == null ? "" : " | returnPad=" + returnPad + " returnLegs=" + returnLegs));
             }
@@ -567,6 +582,9 @@ namespace Server.CustomBots
             var end = String.IsNullOrEmpty(destination.NearestWaypoint) ? null : FindNode(nodes, destination.NearestWaypoint);
             if (end == null) end = FindNearest(nodes.Values, new Point3D(destination.X, destination.Y, destination.Z), 64);
             if (start == null || end == null) return false;
+            if (!HasLocalPath(map, startPoint, new Point3D(start.X, start.Y, start.Z))
+                || !HasLocalPath(map, new Point3D(end.X, end.Y, end.Z), new Point3D(destination.X, destination.Y, destination.Z)))
+                return false;
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var pending = new Queue<string>();
@@ -592,6 +610,22 @@ namespace Server.CustomBots
             return true;
         }
 
+        // A native entrance must be reachable from the accepted surface graph
+        // through actual ServUO movement, not just lie within a radius of it.
+        private static bool HasVerifiedGraphApproachLocked(Map map, Point3D point)
+        {
+            if (!IsWalkable(map, point.X, point.Y, point.Z)) return false;
+            var nodes = new List<PlayerBotWaypoint>();
+            foreach (var waypoint in _data.Waypoints)
+            {
+                if (String.Equals(waypoint.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                    && IsWalkable(map, waypoint.X, waypoint.Y, waypoint.Z))
+                    nodes.Add(waypoint);
+            }
+            var nearest = FindNearest(nodes, point, 64);
+            return nearest != null && HasLocalPath(map, new Point3D(nearest.X, nearest.Y, nearest.Z), point);
+        }
+
         private static string LegKey(PlayerBotWaypoint from, PlayerBotWaypoint to)
         {
             return from.Name + "\n" + to.Name;
@@ -601,21 +635,70 @@ namespace Server.CustomBots
         // used by ServUO movement. This mirrors the bot's direct leg walking.
         private static bool IsDirectLegWalkable(Map map, PlayerBotWaypoint from, PlayerBotWaypoint to)
         {
-            if (!IsWalkable(map, from.X, from.Y, from.Z) || !IsWalkable(map, to.X, to.Y, to.Z)) return false;
-            var cursor = new Point3D(from.X, from.Y, from.Z);
-            var source = new Point3D(from.X, from.Y, from.Z);
-            var safety = 0;
-            while ((cursor.X != to.X || cursor.Y != to.Y) && safety++ < 40)
+            return TryBuildDirectPath(map, new Point3D(from.X, from.Y, from.Z), new Point3D(to.X, to.Y, to.Z), 40, out _);
+        }
+
+        private static bool HasLocalPath(Map map, Point3D from, Point3D to)
+        {
+            var ignored = new List<Point3D>();
+            return TryAppendLocalPath(map, from, to, ignored);
+        }
+
+        // Keep graph connector paths bounded. First preserve the inexpensive
+        // direct-leg behavior, then use ServUO's A* only for a nearby blocked
+        // endpoint such as an outdoor dungeon pad.
+        private static bool TryAppendLocalPath(Map map, Point3D from, Point3D to, List<Point3D> route)
+        {
+            if (!IsWalkable(map, from.X, from.Y, from.Z) || !IsWalkable(map, to.X, to.Y, to.Z)
+                || Math.Abs(from.X - to.X) > 64 || Math.Abs(from.Y - to.Y) > 64)
+                return false;
+
+            List<Point3D> steps;
+            if (!TryBuildDirectPath(map, from, to, 64, out steps))
             {
-                var direction = DirectionTo(cursor, new Point3D(to.X, to.Y, to.Z));
+                var path = new MovementPath(from, to, map);
+                if (!path.Success || path.Directions == null || path.Directions.Length > 256) return false;
+                steps = new List<Point3D>();
+                var cursor = from;
+                foreach (var direction in path.Directions)
+                {
+                    int nextZ;
+                    if (!CalcMoves.CheckMovement(from, map, cursor, direction, out nextZ)) return false;
+                    var x = cursor.X;
+                    var y = cursor.Y;
+                    CalcMoves.Offset(direction, ref x, ref y);
+                    cursor = new Point3D(x, y, nextZ);
+                    steps.Add(cursor);
+                }
+                if (cursor.X != to.X || cursor.Y != to.Y || Math.Abs(cursor.Z - to.Z) >= 16) return false;
+            }
+            foreach (var step in steps) AppendRoutePoint(route, step);
+            return true;
+        }
+
+        private static bool TryBuildDirectPath(Map map, Point3D from, Point3D to, int maximumSteps, out List<Point3D> steps)
+        {
+            steps = new List<Point3D>();
+            if (!IsWalkable(map, from.X, from.Y, from.Z) || !IsWalkable(map, to.X, to.Y, to.Z)) return false;
+            var cursor = from;
+            var safety = 0;
+            while ((cursor.X != to.X || cursor.Y != to.Y) && safety++ < maximumSteps)
+            {
+                var direction = DirectionTo(cursor, to);
                 int nextZ;
-                if (!CalcMoves.CheckMovement(source, map, cursor, direction, out nextZ)) return false;
+                if (!CalcMoves.CheckMovement(from, map, cursor, direction, out nextZ)) return false;
                 var x = cursor.X;
                 var y = cursor.Y;
                 CalcMoves.Offset(direction, ref x, ref y);
                 cursor = new Point3D(x, y, nextZ);
+                steps.Add(cursor);
             }
             return cursor.X == to.X && cursor.Y == to.Y && Math.Abs(cursor.Z - to.Z) < 16;
+        }
+
+        private static void AppendRoutePoint(List<Point3D> route, Point3D point)
+        {
+            if (route.Count == 0 || route[route.Count - 1] != point) route.Add(point);
         }
 
         private static Direction DirectionTo(Point3D from, Point3D to)
@@ -805,6 +888,7 @@ namespace Server.CustomBots
                 }
                 nearby.Free();
                 if (entry == null) return false;
+                if (!HasVerifiedGraphApproachLocked(map, new Point3D(entry.X, entry.Y, entry.Z))) return false;
 
                 int interiorLegs;
                 var interiorName = FindVerifiedDungeonInteriorLocked(map, entrance, entry.PointDest, out interiorLegs);
