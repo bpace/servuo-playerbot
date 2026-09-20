@@ -442,14 +442,17 @@ namespace Server.CustomBots
             {
                 Teleporter matched = null;
                 var bestDistance = 3;
-                foreach (var item in map.GetItemsInRange<Teleporter>(new Point3D(entrance.X, entrance.Y, entrance.Z), 2))
+                var nearby = map.GetItemsInRange(new Point3D(entrance.X, entrance.Y, entrance.Z), 2);
+                foreach (Item item in nearby)
                 {
-                    if (item.Deleted) continue;
+                    var teleporter = item as Teleporter;
+                    if (teleporter == null || teleporter.Deleted) continue;
                     var distance = Math.Max(Math.Abs(item.X - entrance.X), Math.Abs(item.Y - entrance.Y));
                     if (distance >= bestDistance) continue;
                     bestDistance = distance;
-                    matched = item;
+                    matched = teleporter;
                 }
+                nearby.Free();
 
                 if (matched == null)
                 {
