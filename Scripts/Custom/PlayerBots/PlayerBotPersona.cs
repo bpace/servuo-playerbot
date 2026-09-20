@@ -40,6 +40,7 @@ namespace Server.CustomBots
             bot.Hue = Utility.RandomSkinHue();
             bot.SpeechHue = Utility.RandomMinMax(0x3B2, 0x59);
             bot.Name = NextName(bot.Female);
+            ApplyGrooming(bot);
             Equip(bot);
         }
 
@@ -50,14 +51,30 @@ namespace Server.CustomBots
             if (bot == null || bot.Deleted)
                 return;
 
+            // Existing bots predate personas. Hair is also the durable marker
+            // that a legacy bot has received its one-time mount roll: do not
+            // grant a fresh 20% chance on every restart.
+            var isLegacyPersona = bot.HairItemID <= 0;
             RepairLegLayer(bot);
-            if (HasOutfit(bot))
-                return;
-
             if (HasLegacyNumberedName(bot.Name))
                 bot.Name = NextName(bot.Female);
 
-            Equip(bot);
+            ApplyGrooming(bot);
+            if (!HasOutfit(bot))
+                Equip(bot);
+            else if (isLegacyPersona && UsesMount(bot))
+                MaybeMount(bot);
+        }
+
+        private static void ApplyGrooming(PlayerBot bot)
+        {
+            if (bot.HairItemID <= 0)
+                Utility.AssignRandomHair(bot, true);
+
+            // Facial hair is intentionally varied, rather than universal,
+            // and is never assigned to female bodies.
+            if (!bot.Female && bot.FacialHairItemID <= 0 && Utility.RandomDouble() < 0.65)
+                Utility.AssignRandomFacialHair(bot, true);
         }
 
         private static void Equip(PlayerBot bot)
@@ -141,8 +158,13 @@ namespace Server.CustomBots
 
         private static void MaybeMount(PlayerBot bot)
         {
-            if (!bot.Mounted && Utility.Random(5) == 0)
+            if (UsesMount(bot) && !bot.Mounted && Utility.Random(5) == 0)
                 new Horse().Rider = bot;
+        }
+
+        private static bool UsesMount(PlayerBot bot)
+        {
+            return bot.BotRole == PlayerBotRole.Traveler || bot.BotRole == PlayerBotRole.Adventurer;
         }
 
         private static void WearIfEmpty(PlayerBot bot, Layer layer, Item item)
