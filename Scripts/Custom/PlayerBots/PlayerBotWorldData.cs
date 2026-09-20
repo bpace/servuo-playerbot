@@ -462,9 +462,16 @@ namespace Server.CustomBots
 
                 found++;
                 var destinationMap = matched.MapDest ?? map;
+                string interior;
+                var routeLegs = 0;
+                lock (Sync)
+                {
+                    interior = FindVerifiedDungeonInteriorLocked(map, entrance, matched.PointDest, out routeLegs);
+                }
                 lines.Add(entrance.Name + " | pad=" + matched.X + "," + matched.Y + "," + matched.Z
                     + " active=" + matched.Active + " | destination=" + matched.PointDest.X + "," + matched.PointDest.Y + "," + matched.PointDest.Z
-                    + "@" + destinationMap.Name);
+                    + "@" + destinationMap.Name + " | interior=" + (interior ?? "none")
+                    + (interior == null ? "" : " routeLegs=" + routeLegs));
             }
 
             try
@@ -481,6 +488,76 @@ namespace Server.CustomBots
             foreach (var line in lines) Console.WriteLine("[PlayerBots] Dungeon pad audit " + map.Name + ": " + line);
             return "Dungeon pad audit " + map.Name + ": " + found + "/" + entrances.Count
                 + " imported entrance tiles have a nearby live Teleporter. Details are in Data/PlayerBots/dungeon-pad-audit-" + map.Name + ".txt.";
+        }
+
+        // A landing candidate is useful only when the shard accepts both
+        // endpoints and the already-audited graph can route between them.
+        // Names narrow the imported dungeon set; terrain and route audit are
+        // still the authority, so this cannot manufacture a cross-map jump.
+        private static string FindVerifiedDungeonInteriorLocked(Map map, PlayerBotDestination entrance, Point3D landing, out int routeLegs)
+        {
+            routeLegs = 0;
+            var marker = entrance.Name.IndexOf(" L1 Entrance", StringComparison.OrdinalIgnoreCase);
+            var dungeon = marker > 0 ? entrance.Name.Substring(0, marker) : entrance.Name;
+            PlayerBotDestination best = null;
+            var bestDistance = Int32.MaxValue;
+            var bestLegs = 0;
+            foreach (var candidate in _data.Destinations)
+            {
+                if (!String.Equals(candidate.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                    || !String.Equals(candidate.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)
+                    || !candidate.Name.StartsWith(dungeon, StringComparison.OrdinalIgnoreCase)) continue;
+                var distance = Math.Max(Math.Abs(candidate.X - landing.X), Math.Abs(candidate.Y - landing.Y));
+                if (distance > 128 || distance >= bestDistance) continue;
+                int legs;
+                if (!HasVerifiedRouteLocked(map, landing, candidate, out legs)) continue;
+                best = candidate;
+                bestDistance = distance;
+                bestLegs = legs;
+            }
+            routeLegs = bestLegs;
+            return best == null ? null : best.Name;
+        }
+
+        private static bool HasVerifiedRouteLocked(Map map, Point3D startPoint, PlayerBotDestination destination, out int routeLegs)
+        {
+            routeLegs = 0;
+            if (!IsWalkable(map, startPoint.X, startPoint.Y, startPoint.Z)
+                || !IsWalkable(map, destination.X, destination.Y, destination.Z)) return false;
+            var nodes = new Dictionary<string, PlayerBotWaypoint>(StringComparer.OrdinalIgnoreCase);
+            foreach (var waypoint in _data.Waypoints)
+            {
+                if (!String.Equals(waypoint.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                    || !IsWalkable(map, waypoint.X, waypoint.Y, waypoint.Z)) continue;
+                nodes[waypoint.Name] = waypoint;
+            }
+            var start = FindNearest(nodes.Values, startPoint, 64);
+            var end = String.IsNullOrEmpty(destination.NearestWaypoint) ? null : FindNode(nodes, destination.NearestWaypoint);
+            if (end == null) end = FindNearest(nodes.Values, new Point3D(destination.X, destination.Y, destination.Z), 64);
+            if (start == null || end == null) return false;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pending = new Queue<string>();
+            var distances = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            seen.Add(start.Name);
+            distances[start.Name] = 0;
+            pending.Enqueue(start.Name);
+            while (pending.Count > 0 && !seen.Contains(end.Name))
+            {
+                var current = FindNode(nodes, pending.Dequeue());
+                if (current == null) continue;
+                foreach (var neighborName in current.Connects)
+                {
+                    var neighbor = FindNode(nodes, neighborName);
+                    if (neighbor == null || seen.Contains(neighbor.Name) || !IsShortLeg(current, neighbor)
+                        || !IsAcceptedLeg(map.Name, current, neighbor)) continue;
+                    seen.Add(neighbor.Name);
+                    distances[neighbor.Name] = distances[current.Name] + 1;
+                    pending.Enqueue(neighbor.Name);
+                }
+            }
+            if (!distances.TryGetValue(end.Name, out routeLegs)) return false;
+            return true;
         }
 
         private static string LegKey(PlayerBotWaypoint from, PlayerBotWaypoint to)
