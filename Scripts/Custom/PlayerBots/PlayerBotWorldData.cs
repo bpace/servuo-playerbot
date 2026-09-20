@@ -769,6 +769,78 @@ namespace Server.CustomBots
             return false;
         }
 
+        // This is intentionally separate from legacy DungeonLinks.  A native
+        // trip exists only when the current shard has live, active entrance
+        // and return teleporters and both audit-backed graph checks succeed.
+        internal sealed class NativeDungeonTrip
+        {
+            public PlayerBotDestination Entrance;
+            public PlayerBotDestination Interior;
+            public Point3D EntrancePad;
+            public Point3D Landing;
+            public Point3D ReturnPad;
+        }
+
+        internal static bool TryGetNativeDungeonTrip(Map map, string entranceName, out NativeDungeonTrip trip)
+        {
+            trip = null;
+            if (map == null || map == Map.Internal || String.IsNullOrEmpty(entranceName)) return false;
+
+            lock (Sync)
+            {
+                var entrance = FindDestinationLocked(entranceName, map.Name);
+                if (entrance == null || !String.Equals(entrance.Kind, "DungeonEntrance", StringComparison.OrdinalIgnoreCase)) return false;
+
+                Teleporter entry = null;
+                var entryDistance = 3;
+                var nearby = map.GetItemsInRange(new Point3D(entrance.X, entrance.Y, entrance.Z), 2);
+                foreach (Item item in nearby)
+                {
+                    var teleporter = item as Teleporter;
+                    if (teleporter == null || teleporter.Deleted || !teleporter.Active || (teleporter.MapDest ?? map) != map) continue;
+                    var distance = Math.Max(Math.Abs(teleporter.X - entrance.X), Math.Abs(teleporter.Y - entrance.Y));
+                    if (distance >= entryDistance) continue;
+                    entry = teleporter;
+                    entryDistance = distance;
+                }
+                nearby.Free();
+                if (entry == null) return false;
+
+                int interiorLegs;
+                var interiorName = FindVerifiedDungeonInteriorLocked(map, entrance, entry.PointDest, out interiorLegs);
+                var interior = String.IsNullOrEmpty(interiorName) ? null : FindDestinationLocked(interiorName, map.Name);
+                if (interior == null) return false;
+
+                Teleporter exit = null;
+                var exitLegs = Int32.MaxValue;
+                nearby = map.GetItemsInRange(entry.PointDest, 128);
+                foreach (Item item in nearby)
+                {
+                    var teleporter = item as Teleporter;
+                    if (teleporter == null || teleporter.Deleted || !teleporter.Active || teleporter.Map != map
+                        || (teleporter.MapDest ?? map) != map
+                        || Math.Max(Math.Abs(teleporter.PointDest.X - entrance.X), Math.Abs(teleporter.PointDest.Y - entrance.Y)) > 12) continue;
+                    int legs;
+                    var pad = new PlayerBotDestination { X = teleporter.X, Y = teleporter.Y, Z = teleporter.Z };
+                    if (!HasVerifiedRouteLocked(map, entry.PointDest, pad, out legs) || legs >= exitLegs) continue;
+                    exit = teleporter;
+                    exitLegs = legs;
+                }
+                nearby.Free();
+                if (exit == null) return false;
+
+                trip = new NativeDungeonTrip
+                {
+                    Entrance = entrance,
+                    Interior = interior,
+                    EntrancePad = new Point3D(entry.X, entry.Y, entry.Z),
+                    Landing = entry.PointDest,
+                    ReturnPad = new Point3D(exit.X, exit.Y, exit.Z)
+                };
+                return true;
+            }
+        }
+
         private static PlayerBotDestination FindDestinationLocked(string name, string facet)
         {
             foreach (var destination in _data.Destinations)

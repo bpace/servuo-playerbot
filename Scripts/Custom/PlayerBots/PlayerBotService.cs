@@ -302,6 +302,7 @@ namespace Server.CustomBots
             }
             if (bot.Map == null || bot.Map == Map.Internal) return;
 
+            if (AdvanceNativeDungeonTravel(bot)) return;
             if (TryFight(bot)) return;
             if (DateTime.UtcNow < bot.NextAction) return;
 
@@ -326,6 +327,7 @@ namespace Server.CustomBots
             // Long hops become a visible public-moongate trip. This avoids
             // teleporting every short walk while keeping the shard populated.
             if ((bot.RoutePoints == null || bot.RouteIndex >= bot.RoutePoints.Count)
+                && String.IsNullOrEmpty(bot.DungeonTravelState)
                 && bot.GetDistanceToSqrt(bot.Destination) > 120 && Utility.RandomDouble() < 0.08)
             {
                 bot.Say("I am taking the moongate to " + bot.DestinationName + ".");
@@ -410,6 +412,81 @@ namespace Server.CustomBots
                 && player.Map == bot.Map && bot.CanBeHarmful(player, false);
         }
 
+        private static bool AdvanceNativeDungeonTravel(PlayerBot bot)
+        {
+            if (String.Equals(bot.DungeonTravelState, "Entering", StringComparison.Ordinal)
+                && bot.InRange(bot.DungeonLanding, 2))
+            {
+                var interior = PlayerBotWorldData.GetDestination(bot.DungeonInteriorName, bot.Map);
+                if (interior == null)
+                {
+                    ClearNativeDungeonTrip(bot);
+                    AssignDestination(bot);
+                    return true;
+                }
+                bot.DungeonTravelState = "Exploring";
+                bot.Destination = new Point3D(interior.X, interior.Y, interior.Z);
+                bot.DestinationName = interior.Name;
+                bot.DungeonReturnAt = DateTime.UtcNow + TimeSpan.FromMinutes(Utility.RandomMinMax(2, 6));
+                PlayerBotWorldData.TryPlanRoute(bot, interior);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+                RecordEvent(bot.Name + " entered " + interior.Name + " through " + bot.DungeonReturnName + ".");
+                return true;
+            }
+            if (String.Equals(bot.DungeonTravelState, "Leaving", StringComparison.Ordinal))
+            {
+                var entrance = PlayerBotWorldData.GetDestination(bot.DungeonReturnName, bot.Map);
+                if (entrance != null && bot.InRange(new Point3D(entrance.X, entrance.Y, entrance.Z), 12)
+                    && !bot.InRange(bot.DungeonReturnPad, 2))
+                {
+                    RecordEvent(bot.Name + " returned from " + bot.DungeonInteriorName + " to " + entrance.Name + ".");
+                    ClearNativeDungeonTrip(bot);
+                    AssignDestination(bot);
+                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static void StepOntoDungeonPad(PlayerBot bot, Point3D pad)
+        {
+            if (bot.Location == pad)
+            {
+                // The real item did not transfer the bot. Never manufacture
+                // a coordinate move; abandon this trip and pick a safe route.
+                ClearNativeDungeonTrip(bot);
+                AssignDestination(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                return;
+            }
+            bot.Move(bot.GetDirectionTo(pad) | Direction.Running);
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(800);
+        }
+
+        private static void PlanNativeDungeonLeg(PlayerBot bot, Point3D destination)
+        {
+            if (bot.RoutePoints != null) bot.RoutePoints.Clear();
+            bot.RouteIndex = 0;
+            PlayerBotWorldData.TryPlanRoute(bot, new PlayerBotDestination
+            {
+                Facet = bot.Map.Name,
+                X = destination.X,
+                Y = destination.Y,
+                Z = destination.Z
+            });
+        }
+
+        private static void ClearNativeDungeonTrip(PlayerBot bot)
+        {
+            bot.DungeonTravelState = "";
+            bot.DungeonInteriorName = "";
+            bot.DungeonReturnName = "";
+            bot.DungeonReturnAt = DateTime.MinValue;
+            bot.DungeonLanding = Point3D.Zero;
+            bot.DungeonReturnPad = Point3D.Zero;
+        }
+
         private static void Arrive(PlayerBot bot)
         {
             if (bot.BotRole == PlayerBotRole.PlayerKiller)
@@ -423,7 +500,12 @@ namespace Server.CustomBots
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(8, 20));
                 return;
             }
-            if (!String.IsNullOrEmpty(bot.DungeonReturnName))
+            if (String.Equals(bot.DungeonTravelState, "Entering", StringComparison.Ordinal))
+            {
+                StepOntoDungeonPad(bot, bot.Destination);
+                return;
+            }
+            if (String.Equals(bot.DungeonTravelState, "Exploring", StringComparison.Ordinal))
             {
                 if (DateTime.UtcNow < bot.DungeonReturnAt)
                 {
@@ -431,29 +513,16 @@ namespace Server.CustomBots
                     bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 30));
                     return;
                 }
-                var exit = PlayerBotWorldData.GetDestination(bot.DungeonReturnName, bot.Map);
-                if (exit != null)
-                {
-                    bot.MoveToWorld(new Point3D(exit.X, exit.Y, exit.Z), bot.Map);
-                    RecordEvent(bot.Name + " returned from " + bot.DestinationName + " to " + exit.Name + ".");
-                }
-                bot.DungeonReturnName = "";
-                bot.DungeonReturnAt = DateTime.MinValue;
-                AssignDestination(bot);
-                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                bot.DungeonTravelState = "Leaving";
+                bot.Destination = bot.DungeonReturnPad;
+                bot.DestinationName = "Return to " + bot.DungeonReturnName;
+                PlanNativeDungeonLeg(bot, bot.Destination);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
                 return;
             }
-            PlayerBotDestination interior;
-            if (PlayerBotWorldData.TryEnterDungeon(bot, out interior))
+            if (String.Equals(bot.DungeonTravelState, "Leaving", StringComparison.Ordinal))
             {
-                var entrance = bot.DestinationName;
-                bot.MoveToWorld(new Point3D(interior.X, interior.Y, interior.Z), bot.Map);
-                bot.Destination = new Point3D(interior.X, interior.Y, interior.Z);
-                bot.DestinationName = interior.Name;
-                bot.DungeonReturnName = entrance;
-                bot.DungeonReturnAt = DateTime.UtcNow + TimeSpan.FromMinutes(Utility.RandomMinMax(2, 6));
-                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-                RecordEvent(bot.Name + " entered " + interior.Name + " through " + entrance + ".");
+                StepOntoDungeonPad(bot, bot.Destination);
                 return;
             }
             if (bot.BotRole == PlayerBotRole.Banker)
@@ -489,9 +558,25 @@ namespace Server.CustomBots
         {
             if (bot.RoutePoints != null) bot.RoutePoints.Clear();
             bot.RouteIndex = 0;
-            var authored = PlayerBotWorldData.RandomDestination(bot.Map);
-            if (authored != null)
+            ClearNativeDungeonTrip(bot);
+            for (var attempt = 0; attempt < 12; attempt++)
             {
+                var authored = PlayerBotWorldData.RandomDestination(bot.Map);
+                if (authored == null) break;
+                if (String.Equals(authored.Kind, "DungeonEntrance", StringComparison.OrdinalIgnoreCase))
+                {
+                    PlayerBotWorldData.NativeDungeonTrip trip;
+                    if (!PlayerBotWorldData.TryGetNativeDungeonTrip(bot.Map, authored.Name, out trip)) continue;
+                    bot.Destination = trip.EntrancePad;
+                    bot.DestinationName = trip.Entrance.Name;
+                    bot.DungeonTravelState = "Entering";
+                    bot.DungeonInteriorName = trip.Interior.Name;
+                    bot.DungeonReturnName = trip.Entrance.Name;
+                    bot.DungeonLanding = trip.Landing;
+                    bot.DungeonReturnPad = trip.ReturnPad;
+                    PlanNativeDungeonLeg(bot, trip.EntrancePad);
+                    return;
+                }
                 bot.Destination = new Point3D(authored.X, authored.Y, authored.Z);
                 bot.DestinationName = authored.Name;
                 PlayerBotWorldData.TryPlanRoute(bot, authored);
