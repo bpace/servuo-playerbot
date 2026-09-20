@@ -139,6 +139,14 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage(message);
                 return;
             }
+            if (action == "dungeonaudit")
+            {
+                var map = e.Length > 1 ? GetMap(e.GetString(1)) : e.Mobile.Map;
+                var message = PlayerBotWorldData.AuditDungeonEntrancePads(map);
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
+                return;
+            }
             if (action == "population")
             {
                 SetTarget(SpawnFacet, Math.Max(0, Math.Min(250, e.Length > 1 ? e.GetInt32(1) : GetTarget(SpawnFacet))));
@@ -164,7 +172,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void ReconcilePopulation()
@@ -598,6 +606,10 @@ namespace Server.CustomBots
             else if (action == "audit")
             {
                 RecordEvent(PlayerBotWorldData.StartRouteAudit(GetSpawnMap()));
+            }
+            else if (action == "dungeonaudit")
+            {
+                RecordEvent(PlayerBotWorldData.AuditDungeonEntrancePads(GetSpawnMap()));
             }
             else if (action == "generatespawns")
             {
