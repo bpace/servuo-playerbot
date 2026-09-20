@@ -736,6 +736,10 @@ namespace Server.CustomBots
             {
                 RecordEvent(PlayerBotWorldData.AuditDungeonEntrancePads(GetSpawnMap()));
             }
+            else if (action == "dungeontest")
+            {
+                RecordEvent(StartNativeDungeonTest(GetSpawnMap()));
+            }
             else if (action == "generatespawns")
             {
                 var created = MaterializeStoredSpawns();
