@@ -44,6 +44,21 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime DungeonReturnAt { get; set; }
 
+        // Native dungeon travel is a small persisted state machine.  It
+        // records physical pads only after the live audit has verified both
+        // teleporters, so a restart cannot turn it into a coordinate jump.
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string DungeonTravelState { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string DungeonInteriorName { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public Point3D DungeonLanding { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public Point3D DungeonReturnPad { get; set; }
+
         // A route is an ordered set of short, authored legs.  It is kept on
         // the bot so the graph can be rebuilt without losing its current
         // progress, and so no long-distance movement is silently converted
@@ -90,6 +105,10 @@ namespace Server.CustomBots
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
+            DungeonTravelState = "";
+            DungeonInteriorName = "";
+            DungeonLanding = Point3D.Zero;
+            DungeonReturnPad = Point3D.Zero;
             RoutePoints = new List<Point3D>();
             RouteIndex = 0;
         }
@@ -113,7 +132,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(3);
+            writer.Write(4);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -124,8 +143,12 @@ namespace Server.CustomBots
             writer.Write(DungeonReturnAt);
             writer.Write(RoutePoints == null ? 0 : RoutePoints.Count);
             if (RoutePoints != null)
-                foreach (var point in RoutePoints) writer.Write(point);
+            foreach (var point in RoutePoints) writer.Write(point);
             writer.Write(RouteIndex);
+            writer.Write(DungeonTravelState);
+            writer.Write(DungeonInteriorName);
+            writer.Write(DungeonLanding);
+            writer.Write(DungeonReturnPad);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -148,6 +171,10 @@ namespace Server.CustomBots
                 RouteIndex = reader.ReadInt();
             }
             else RouteIndex = 0;
+            DungeonTravelState = version >= 4 ? reader.ReadString() ?? "" : "";
+            DungeonInteriorName = version >= 4 ? reader.ReadString() ?? "" : "";
+            DungeonLanding = version >= 4 ? reader.ReadPoint3D() : Point3D.Zero;
+            DungeonReturnPad = version >= 4 ? reader.ReadPoint3D() : Point3D.Zero;
             Player = false;
         }
     }
