@@ -841,6 +841,23 @@ namespace Server.CustomBots
             }
         }
 
+        internal static bool TryGetAnyNativeDungeonTrip(Map map, out NativeDungeonTrip trip)
+        {
+            trip = null;
+            if (map == null || map == Map.Internal) return false;
+            var names = new List<string>();
+            lock (Sync)
+            {
+                foreach (var destination in _data.Destinations)
+                    if (String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        && String.Equals(destination.Kind, "DungeonEntrance", StringComparison.OrdinalIgnoreCase))
+                        names.Add(destination.Name);
+            }
+            foreach (var name in names)
+                if (TryGetNativeDungeonTrip(map, name, out trip)) return true;
+            return false;
+        }
+
         private static PlayerBotDestination FindDestinationLocked(string name, string facet)
         {
             foreach (var destination in _data.Destinations)
