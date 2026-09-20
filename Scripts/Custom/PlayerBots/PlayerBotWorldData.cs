@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
+using Server.Items;
 using Server.Regions;
 using CalcMoves = Server.Movement.Movement;
 
@@ -415,6 +416,68 @@ namespace Server.CustomBots
         {
             StartRouteAudit(Map.Felucca);
             StartRouteAudit(Map.Trammel);
+        }
+
+        // The imported T2A records identify the surface entrance tiles, but
+        // deliberately do not claim where an AoS shard's live teleporters
+        // lead.  Read the actual world items before authoring any shortcut.
+        // This is diagnostic only: it neither creates DungeonLinks nor moves
+        // a bot.
+        internal static string AuditDungeonEntrancePads(Map map)
+        {
+            if (map == null || map == Map.Internal) return "No playable facet selected.";
+
+            var lines = new List<string>();
+            var entrances = new List<PlayerBotDestination>();
+            lock (Sync)
+            {
+                foreach (var destination in _data.Destinations)
+                    if (String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        && String.Equals(destination.Kind, "DungeonEntrance", StringComparison.OrdinalIgnoreCase))
+                        entrances.Add(destination);
+            }
+
+            var found = 0;
+            foreach (var entrance in entrances)
+            {
+                Teleporter matched = null;
+                var bestDistance = 3;
+                foreach (var item in map.GetItemsInRange<Teleporter>(new Point3D(entrance.X, entrance.Y, entrance.Z), 2))
+                {
+                    if (item.Deleted) continue;
+                    var distance = Math.Max(Math.Abs(item.X - entrance.X), Math.Abs(item.Y - entrance.Y));
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    matched = item;
+                }
+
+                if (matched == null)
+                {
+                    lines.Add(entrance.Name + " | no Teleporter within 2 tiles of " + entrance.X + "," + entrance.Y + "," + entrance.Z);
+                    continue;
+                }
+
+                found++;
+                var destinationMap = matched.MapDest ?? map;
+                lines.Add(entrance.Name + " | pad=" + matched.X + "," + matched.Y + "," + matched.Z
+                    + " active=" + matched.Active + " | destination=" + matched.PointDest.X + "," + matched.PointDest.Y + "," + matched.PointDest.Z
+                    + "@" + destinationMap.Name);
+            }
+
+            try
+            {
+                var directory = System.IO.Path.GetDirectoryName(PathName);
+                if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                File.WriteAllLines(System.IO.Path.Combine(directory, "dungeon-pad-audit-" + map.Name + ".txt"), lines.ToArray());
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[PlayerBots] Could not write dungeon pad audit: " + e.Message);
+            }
+
+            foreach (var line in lines) Console.WriteLine("[PlayerBots] Dungeon pad audit " + map.Name + ": " + line);
+            return "Dungeon pad audit " + map.Name + ": " + found + "/" + entrances.Count
+                + " imported entrance tiles have a nearby live Teleporter. Details are in Data/PlayerBots/dungeon-pad-audit-" + map.Name + ".txt.";
         }
 
         private static string LegKey(PlayerBotWaypoint from, PlayerBotWaypoint to)
