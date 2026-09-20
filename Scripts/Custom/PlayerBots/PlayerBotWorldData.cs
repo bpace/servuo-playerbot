@@ -464,14 +464,19 @@ namespace Server.CustomBots
                 var destinationMap = matched.MapDest ?? map;
                 string interior;
                 var routeLegs = 0;
+                string returnPad = null;
+                var returnLegs = 0;
                 lock (Sync)
                 {
                     interior = FindVerifiedDungeonInteriorLocked(map, entrance, matched.PointDest, out routeLegs);
+                    if (interior != null && destinationMap == map)
+                        returnPad = FindVerifiedDungeonReturnPadLocked(map, entrance, matched.PointDest, out returnLegs);
                 }
                 lines.Add(entrance.Name + " | pad=" + matched.X + "," + matched.Y + "," + matched.Z
                     + " active=" + matched.Active + " | destination=" + matched.PointDest.X + "," + matched.PointDest.Y + "," + matched.PointDest.Z
                     + "@" + destinationMap.Name + " | interior=" + (interior ?? "none")
-                    + (interior == null ? "" : " routeLegs=" + routeLegs));
+                    + (interior == null ? "" : " routeLegs=" + routeLegs)
+                    + (returnPad == null ? "" : " | returnPad=" + returnPad + " returnLegs=" + returnLegs));
             }
 
             try
@@ -517,6 +522,33 @@ namespace Server.CustomBots
             }
             routeLegs = bestLegs;
             return best == null ? null : best.Name;
+        }
+
+        // An exit is trusted only when its physical pad lies on the same
+        // accepted graph component as the verified landing and its live
+        // destination returns to the surface entrance area. This lets a
+        // future behavior use the shard's Teleporter rather than MoveToWorld.
+        private static string FindVerifiedDungeonReturnPadLocked(Map map, PlayerBotDestination entrance, Point3D landing, out int routeLegs)
+        {
+            routeLegs = 0;
+            Teleporter best = null;
+            var bestLegs = Int32.MaxValue;
+            foreach (Item item in World.Items.Values)
+            {
+                var teleporter = item as Teleporter;
+                if (teleporter == null || teleporter.Deleted || !teleporter.Active || teleporter.Map != map) continue;
+                var targetMap = teleporter.MapDest ?? map;
+                if (targetMap != map
+                    || Math.Max(Math.Abs(teleporter.PointDest.X - entrance.X), Math.Abs(teleporter.PointDest.Y - entrance.Y)) > 12) continue;
+                int legs;
+                var pad = new PlayerBotDestination { X = teleporter.X, Y = teleporter.Y, Z = teleporter.Z };
+                if (!HasVerifiedRouteLocked(map, landing, pad, out legs) || legs >= bestLegs) continue;
+                best = teleporter;
+                bestLegs = legs;
+            }
+            routeLegs = best == null ? 0 : bestLegs;
+            return best == null ? null : best.X + "," + best.Y + "," + best.Z + "->"
+                + best.PointDest.X + "," + best.PointDest.Y + "," + best.PointDest.Z;
         }
 
         private static bool HasVerifiedRouteLocked(Map map, Point3D startPoint, PlayerBotDestination destination, out int routeLegs)
