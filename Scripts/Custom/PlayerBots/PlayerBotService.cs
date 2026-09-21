@@ -27,8 +27,10 @@ namespace Server.CustomBots
         private static readonly TimeSpan BankHubReconcileInterval = TimeSpan.FromSeconds(20);
         private static DateTime _nextBankHubReconcile = DateTime.MinValue;
         private const string BankHubPrefix = "BankHub:";
-        private const int BritainBankCrowd = 18;
-        private const int OtherBankCrowd = 4;
+        private const int TrammelBritainBankCrowd = 18;
+        private const int TrammelOtherBankCrowd = 4;
+        private const int FeluccaBritainBankCrowd = 12;
+        private const int FeluccaOtherBankCrowd = 3;
 
         public static int TargetPopulation
         {
@@ -680,13 +682,18 @@ namespace Server.CustomBots
         // crowd; everyone else still gets a visible local gathering.
         private static void ReconcileBankHubs()
         {
-            var map = Map.Trammel;
+            ReconcileBankHubs(Map.Trammel, TrammelBritainBankCrowd, TrammelOtherBankCrowd);
+            ReconcileBankHubs(Map.Felucca, FeluccaBritainBankCrowd, FeluccaOtherBankCrowd);
+        }
+
+        private static void ReconcileBankHubs(Map map, int britainCrowd, int otherCrowd)
+        {
             var banks = PlayerBotWorldData.GetDestinations(map, "Bank");
             foreach (var bank in banks)
             {
                 var source = BankHubPrefix + bank.Name;
                 var desired = String.Equals(bank.Name, "Britain Bank", StringComparison.OrdinalIgnoreCase)
-                    ? BritainBankCrowd : OtherBankCrowd;
+                    ? britainCrowd : otherCrowd;
                 var current = 0;
                 foreach (var bot in FindBots())
                     if (!bot.Deleted && bot.Alive && bot.Map == map
@@ -703,10 +710,16 @@ namespace Server.CustomBots
         private static void SpawnBankHubBot(PlayerBotDestination bank, Map map, string source)
         {
             var roleRoll = Utility.Random(10);
-            var role = roleRoll < 4 ? PlayerBotRole.Banker
-                : roleRoll < 7 ? PlayerBotRole.Townie
-                : roleRoll < 9 ? PlayerBotRole.Traveler
-                : PlayerBotRole.Adventurer;
+            var role = map == Map.Felucca
+                ? (roleRoll < 3 ? PlayerBotRole.Banker
+                    : roleRoll < 6 ? PlayerBotRole.Townie
+                    : roleRoll < 8 ? PlayerBotRole.Traveler
+                    : roleRoll < 9 ? PlayerBotRole.Adventurer
+                    : PlayerBotRole.Thief)
+                : (roleRoll < 4 ? PlayerBotRole.Banker
+                    : roleRoll < 7 ? PlayerBotRole.Townie
+                    : roleRoll < 9 ? PlayerBotRole.Traveler
+                    : PlayerBotRole.Adventurer);
             var bot = new PlayerBot(role);
             bot.SpawnSource = source;
             bot.MoveToWorld(GetBankHubPoint(bank, map), map);

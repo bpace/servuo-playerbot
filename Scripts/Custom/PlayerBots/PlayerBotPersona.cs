@@ -93,6 +93,9 @@ namespace Server.CustomBots
                 case PlayerBotRole.PlayerKiller:
                     EquipPlayerKiller(bot);
                     break;
+                case PlayerBotRole.Thief:
+                    EquipThief(bot);
+                    break;
                 default:
                     EquipTraveler(bot);
                     break;
@@ -149,6 +152,15 @@ namespace Server.CustomBots
             WearIfEmpty(bot, Layer.Pants, new LeatherLegs());
             WearIfEmpty(bot, Layer.Cloak, new Cloak(0x455));
             EquipWeapon(bot, new Katana());
+        }
+
+        private static void EquipThief(PlayerBot bot)
+        {
+            WearIfEmpty(bot, Layer.Shirt, new Shirt(RandomHue(DarkHues)));
+            WearIfEmpty(bot, Layer.Pants, new LongPants(0x455));
+            WearIfEmpty(bot, Layer.Shoes, new Boots());
+            WearIfEmpty(bot, Layer.Cloak, new Cloak(0x455));
+            EquipWeapon(bot, new Dagger());
         }
 
         private static void EquipWeapon(PlayerBot bot, Item weapon)
