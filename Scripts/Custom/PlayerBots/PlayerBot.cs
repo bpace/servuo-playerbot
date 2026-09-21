@@ -15,6 +15,18 @@ namespace Server.CustomBots
         Thief
     }
 
+    // Mirrors UO Offline's BankSitterBehavior roles. Bank crowd behavior is
+    // deliberately separate from a character's combat/travel identity.
+    public enum PlayerBotBankRole
+    {
+        Regular,
+        Hawker,
+        Afk,
+        ResistMacro,
+        HidingMacro,
+        StealthMacro
+    }
+
     // A persistent PlayerMobile without a NetState. It deliberately uses
     // ServUO's native save format and combat/notoriety rules.
     public class PlayerBot : PlayerMobile
@@ -33,6 +45,18 @@ namespace Server.CustomBots
 
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime NextChat { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public PlayerBotBankRole BankRole { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public Point3D BankHome { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime NextBankAction { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public bool BankSitterInitialized { get; set; }
 
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
@@ -109,6 +133,10 @@ namespace Server.CustomBots
             PlayerBotPersonas.ApplyNew(this);
             Destination = Point3D.Zero;
             DestinationName = "";
+            BankRole = PlayerBotBankRole.Regular;
+            BankHome = Point3D.Zero;
+            NextBankAction = DateTime.MinValue;
+            BankSitterInitialized = false;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -139,12 +167,16 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(4);
+            writer.Write(5);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
             writer.Write(NextAction);
             writer.Write(NextChat);
+            writer.Write((int)BankRole);
+            writer.Write(BankHome);
+            writer.Write(NextBankAction);
+            writer.Write(BankSitterInitialized);
             writer.Write(SpawnSource);
             writer.Write(DungeonReturnName);
             writer.Write(DungeonReturnAt);
@@ -167,6 +199,10 @@ namespace Server.CustomBots
             DestinationName = reader.ReadString() ?? "";
             NextAction = reader.ReadDateTime();
             NextChat = reader.ReadDateTime();
+            BankRole = version >= 5 ? (PlayerBotBankRole)reader.ReadInt() : PlayerBotBankRole.Regular;
+            BankHome = version >= 5 ? reader.ReadPoint3D() : Point3D.Zero;
+            NextBankAction = version >= 5 ? reader.ReadDateTime() : DateTime.MinValue;
+            BankSitterInitialized = version >= 5 && reader.ReadBool();
             SpawnSource = version >= 1 ? reader.ReadString() ?? "" : "";
             DungeonReturnName = version >= 2 ? reader.ReadString() ?? "" : "";
             DungeonReturnAt = version >= 2 ? reader.ReadDateTime() : DateTime.MinValue;

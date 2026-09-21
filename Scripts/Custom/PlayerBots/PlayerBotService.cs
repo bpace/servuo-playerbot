@@ -24,6 +24,8 @@ namespace Server.CustomBots
         public static string SpawnFacet = "Felucca";
         private static Timer _timer;
         private static readonly Queue<string> Events = new Queue<string>();
+        private static DateTime _nextRouteAudit = DateTime.MinValue;
+        private static DateTime _nextDashboardRefresh = DateTime.MinValue;
         private static readonly TimeSpan BankHubReconcileInterval = TimeSpan.FromSeconds(20);
         private static DateTime _nextBankHubReconcile = DateTime.MinValue;
         private const string BankHubPrefix = "BankHub:";
@@ -78,7 +80,10 @@ namespace Server.CustomBots
             PlayerBotWorldData.Initialize();
             PlayerBotWorldData.StartFacetAudits();
             Enabled = PlayerBotWorldData.IsEnabled;
-            _timer = Timer.DelayCall(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2), Tick);
+            // Actors need independent sub-second scheduling. Background work
+            // remains throttled inside Tick, so this does not multiply audit
+            // or dashboard cost.
+            _timer = Timer.DelayCall(TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250), Tick);
             Timer.DelayCall(TimeSpan.FromSeconds(10), RestoreFacetLocations);
             PlayerBotDashboard.Start();
         }
@@ -96,6 +101,7 @@ namespace Server.CustomBots
             {
                 bot.Player = false;
                 PlayerBotPersonas.EnsureAppearance(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(0, 1500));
                 if (bot.Map == Map.Internal)
                 {
                     // Legacy v1 bots were saved as Player=true and lost their
@@ -106,6 +112,7 @@ namespace Server.CustomBots
                     bot.MoveToWorld(bot.LogoutLocation, map);
                     restored++;
                 }
+                if (IsBankHubBot(bot)) InitializeBankSitter(bot, true);
             }
             if (restored > 0) RecordEvent("Restored " + restored + " PlayerBot(s) from Internal to their saved facets.");
         }
@@ -322,14 +329,23 @@ namespace Server.CustomBots
         private static void Tick()
         {
             PlayerBotDashboard.ProcessPendingActions();
-            var auditResult = PlayerBotWorldData.AdvanceRouteAudit(32);
-            if (!String.IsNullOrEmpty(auditResult)) RecordEvent(auditResult);
-            PlayerBotDashboard.RefreshSnapshot();
+            var now = DateTime.UtcNow;
+            if (now >= _nextRouteAudit)
+            {
+                var auditResult = PlayerBotWorldData.AdvanceRouteAudit(32);
+                if (!String.IsNullOrEmpty(auditResult)) RecordEvent(auditResult);
+                _nextRouteAudit = now + TimeSpan.FromSeconds(2);
+            }
+            if (now >= _nextDashboardRefresh)
+            {
+                PlayerBotDashboard.RefreshSnapshot();
+                _nextDashboardRefresh = now + TimeSpan.FromSeconds(2);
+            }
             if (!Enabled) return;
-            if (DateTime.UtcNow >= _nextBankHubReconcile)
+            if (now >= _nextBankHubReconcile)
             {
                 ReconcileBankHubs();
-                _nextBankHubReconcile = DateTime.UtcNow + BankHubReconcileInterval;
+                _nextBankHubReconcile = now + BankHubReconcileInterval;
             }
             foreach (var bot in FindBots()) Tick(bot);
         }
@@ -347,9 +363,18 @@ namespace Server.CustomBots
             }
             if (bot.Map == null || bot.Map == Map.Internal) return;
 
-            if (AdvanceNativeDungeonTravel(bot)) return;
-            if (TryFight(bot)) return;
             if (DateTime.UtcNow < bot.NextAction) return;
+            if (IsBankHubBot(bot))
+            {
+                TickBankSitter(bot);
+                return;
+            }
+            if (AdvanceNativeDungeonTravel(bot)) return;
+            if (TryFight(bot))
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+                return;
+            }
 
             EnsureDestination(bot);
             var travelTarget = bot.Destination;
@@ -358,7 +383,7 @@ namespace Server.CustomBots
                 if (bot.InRange(bot.RoutePoints[bot.RouteIndex], 2))
                 {
                     bot.RouteIndex++;
-                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+                    bot.NextAction = DateTime.UtcNow + MoveDelay();
                     return;
                 }
                 travelTarget = bot.RoutePoints[bot.RouteIndex];
@@ -376,7 +401,7 @@ namespace Server.CustomBots
                 bot.RouteIndex = 0;
                 AssignDestination(bot);
             }
-            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(800);
+            bot.NextAction = DateTime.UtcNow + MoveDelay();
         }
 
         private static bool TryFight(PlayerBot bot)
@@ -528,7 +553,7 @@ namespace Server.CustomBots
             }
             if (IsBankHubBot(bot) && AssignBankHubWander(bot))
             {
-                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 7));
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(350, 1800));
                 return;
             }
             if (IsWanderDestination(bot))
@@ -722,8 +747,9 @@ namespace Server.CustomBots
                     : PlayerBotRole.Adventurer);
             var bot = new PlayerBot(role);
             bot.SpawnSource = source;
-            bot.MoveToWorld(GetBankHubPoint(bank, map), map);
-            AssignBankHubWander(bot);
+            bot.MoveToWorld(GetBankHubPoint(bank, map, null), map);
+            InitializeBankSitter(bot, false);
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(0, 2200));
         }
 
         private static bool IsBankHubBot(PlayerBot bot)
@@ -734,27 +760,153 @@ namespace Server.CustomBots
 
         private static bool AssignBankHubWander(PlayerBot bot)
         {
+            return InitializeBankSitter(bot, false);
+        }
+
+        // ServUO counterpart to UO Offline's BankSitterBehavior.OnAttached.
+        // A sitter owns one stable, separate home tile instead of repeatedly
+        // choosing a shared bank coordinate as a generic wanderer.
+        private static bool InitializeBankSitter(PlayerBot bot, bool relocateLegacyBot)
+        {
             if (!IsBankHubBot(bot) || bot.Map == null || bot.Map == Map.Internal) return false;
             var bankName = bot.SpawnSource.Substring(BankHubPrefix.Length);
             var bank = PlayerBotWorldData.GetDestination(bankName, bot.Map);
             if (bank == null) return false;
-            bot.Destination = GetBankHubPoint(bank, bot.Map);
-            bot.DestinationName = bank.Name + " crowd";
+
+            if (!bot.BankSitterInitialized || bot.BankHome == Point3D.Zero)
+            {
+                bot.BankHome = GetBankHubPoint(bank, bot.Map, bot);
+                bot.BankRole = RollBankSitterRole();
+                bot.NextBankAction = DateTime.UtcNow + BankActionDelay(bot.BankRole);
+                bot.BankSitterInitialized = true;
+                if (relocateLegacyBot) bot.MoveToWorld(bot.BankHome, bot.Map);
+            }
+
+            bot.Destination = bot.BankHome;
+            bot.DestinationName = bank.Name + " bank sitter";
             if (bot.RoutePoints != null) bot.RoutePoints.Clear();
             bot.RouteIndex = 0;
             return true;
         }
 
-        private static Point3D GetBankHubPoint(PlayerBotDestination bank, Map map)
+        private static PlayerBotBankRole RollBankSitterRole()
         {
-            for (var attempt = 0; attempt < 24; attempt++)
+            var roll = Utility.Random(100);
+            if (roll < 30) return PlayerBotBankRole.Regular;
+            if (roll < 50) return PlayerBotBankRole.Hawker;
+            if (roll < 65) return PlayerBotBankRole.Afk;
+            if (roll < 80) return PlayerBotBankRole.ResistMacro;
+            if (roll < 90) return PlayerBotBankRole.HidingMacro;
+            return PlayerBotBankRole.StealthMacro;
+        }
+
+        private static void TickBankSitter(PlayerBot bot)
+        {
+            if (!InitializeBankSitter(bot, false)) return;
+
+            // UO Offline sitters only walk back when displaced. This avoids
+            // the marching-circle look produced by a generic wander target.
+            if (!bot.InRange(bot.BankHome, 1))
             {
-                var x = bank.X + Utility.RandomMinMax(-12, 12);
-                var y = bank.Y + Utility.RandomMinMax(-12, 12);
+                if (!bot.Move(bot.GetDirectionTo(bot.BankHome)))
+                {
+                    bot.BankSitterInitialized = false;
+                    InitializeBankSitter(bot, false);
+                }
+                bot.NextAction = DateTime.UtcNow + MoveDelay();
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            if (now < bot.NextBankAction)
+            {
+                bot.NextAction = bot.NextBankAction;
+                return;
+            }
+
+            switch (bot.BankRole)
+            {
+                case PlayerBotBankRole.Regular:
+                    TryBankSitterSpeech(bot, new[] { "bank", "LFG", "WTB regs", "anyone headed to a dungeon?" }, 0.25);
+                    break;
+                case PlayerBotBankRole.Hawker:
+                    // UO Offline hawkers advertise actual BotShop stock. The
+                    // ServUO port has no trade inventory yet, so it retains
+                    // their cadence without inventing items for sale.
+                    TryBankSitterSpeech(bot, new[] { "WTB regs", "buying ingots", "looking for a hunting group" }, 0.55);
+                    break;
+                case PlayerBotBankRole.ResistMacro:
+                    bot.Animate(32, 5, 1, true, false, 0);
+                    break;
+                case PlayerBotBankRole.HidingMacro:
+                    bot.Hidden = !bot.Hidden;
+                    break;
+                case PlayerBotBankRole.StealthMacro:
+                    bot.Hidden = true;
+                    var drift = GetBankSitterDriftPoint(bot);
+                    if (drift != Point3D.Zero) bot.Move(bot.GetDirectionTo(drift));
+                    break;
+            }
+
+            bot.NextBankAction = now + BankActionDelay(bot.BankRole);
+            bot.NextAction = bot.NextBankAction;
+        }
+
+        private static void TryBankSitterSpeech(PlayerBot bot, string[] lines, double chance)
+        {
+            if (Utility.RandomDouble() >= chance || lines == null || lines.Length == 0) return;
+            bot.Say(lines[Utility.Random(lines.Length)]);
+        }
+
+        private static TimeSpan BankActionDelay(PlayerBotBankRole role)
+        {
+            switch (role)
+            {
+                case PlayerBotBankRole.Hawker: return TimeSpan.FromSeconds(Utility.RandomMinMax(10, 25));
+                case PlayerBotBankRole.ResistMacro: return TimeSpan.FromSeconds(Utility.RandomMinMax(8, 15));
+                case PlayerBotBankRole.HidingMacro: return TimeSpan.FromSeconds(Utility.RandomMinMax(4, 10));
+                case PlayerBotBankRole.StealthMacro: return TimeSpan.FromSeconds(Utility.RandomMinMax(2, 5));
+                case PlayerBotBankRole.Afk: return TimeSpan.FromMinutes(Utility.RandomMinMax(8, 15));
+                default: return TimeSpan.FromSeconds(Utility.RandomMinMax(15, 45));
+            }
+        }
+
+        private static Point3D GetBankSitterDriftPoint(PlayerBot bot)
+        {
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                var x = bot.BankHome.X + Utility.RandomMinMax(-3, 3);
+                var y = bot.BankHome.Y + Utility.RandomMinMax(-3, 3);
+                var z = bot.Map.GetAverageZ(x, y);
+                var point = new Point3D(x, y, z);
+                if (bot.Map.CanFit(x, y, z, 16, false, false) && IsBankHubPointFree(bot.Map, point, bot)) return point;
+            }
+            return Point3D.Zero;
+        }
+
+        private static Point3D GetBankHubPoint(PlayerBotDestination bank, Map map, PlayerBot movingBot)
+        {
+            for (var attempt = 0; attempt < 48; attempt++)
+            {
+                var x = bank.X + Utility.RandomMinMax(-18, 18);
+                var y = bank.Y + Utility.RandomMinMax(-18, 18);
                 var z = map.GetAverageZ(x, y);
-                if (map.CanFit(x, y, z, 16, false, false)) return new Point3D(x, y, z);
+                var point = new Point3D(x, y, z);
+                if (map.CanFit(x, y, z, 16, false, false) && IsBankHubPointFree(map, point, movingBot)) return point;
             }
             return new Point3D(bank.X, bank.Y, bank.Z);
+        }
+
+        private static bool IsBankHubPointFree(Map map, Point3D point, PlayerBot movingBot)
+        {
+            foreach (var other in FindBots())
+                if (other != movingBot && !other.Deleted && other.Alive && other.Map == map && other.InRange(point, 2)) return false;
+            return true;
+        }
+
+        private static TimeSpan MoveDelay()
+        {
+            return TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 1050));
         }
 
         public static void ReportMurder(PlayerBot victim)
