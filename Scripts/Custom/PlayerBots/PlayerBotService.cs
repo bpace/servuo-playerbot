@@ -24,6 +24,11 @@ namespace Server.CustomBots
         public static string SpawnFacet = "Felucca";
         private static Timer _timer;
         private static readonly Queue<string> Events = new Queue<string>();
+        private static readonly TimeSpan BankHubReconcileInterval = TimeSpan.FromSeconds(20);
+        private static DateTime _nextBankHubReconcile = DateTime.MinValue;
+        private const string BankHubPrefix = "BankHub:";
+        private const int BritainBankCrowd = 18;
+        private const int OtherBankCrowd = 4;
 
         public static int TargetPopulation
         {
@@ -319,6 +324,11 @@ namespace Server.CustomBots
             if (!String.IsNullOrEmpty(auditResult)) RecordEvent(auditResult);
             PlayerBotDashboard.RefreshSnapshot();
             if (!Enabled) return;
+            if (DateTime.UtcNow >= _nextBankHubReconcile)
+            {
+                ReconcileBankHubs();
+                _nextBankHubReconcile = DateTime.UtcNow + BankHubReconcileInterval;
+            }
             foreach (var bot in FindBots()) Tick(bot);
         }
 
@@ -514,6 +524,11 @@ namespace Server.CustomBots
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(8);
                 return;
             }
+            if (IsBankHubBot(bot) && AssignBankHubWander(bot))
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 7));
+                return;
+            }
             if (IsWanderDestination(bot))
             {
                 // Townies and bankers make several small circuits around a
@@ -589,11 +604,14 @@ namespace Server.CustomBots
             if (bot.RoutePoints != null) bot.RoutePoints.Clear();
             bot.RouteIndex = 0;
             ClearNativeDungeonTrip(bot);
+            if (IsBankHubBot(bot) && AssignBankHubWander(bot)) return;
             for (var attempt = 0; attempt < 12; attempt++)
             {
                 var authored = bot.BotRole == PlayerBotRole.Banker
                     ? PlayerBotWorldData.RandomDestination(bot.Map, "Bank")
-                    : PlayerBotWorldData.RandomDestination(bot.Map);
+                    : (Utility.RandomDouble() < 0.20
+                        ? PlayerBotWorldData.RandomDestination(bot.Map, "Bank")
+                        : PlayerBotWorldData.RandomDestination(bot.Map));
                 if (authored == null) break;
                 if (String.Equals(authored.Kind, "DungeonEntrance", StringComparison.OrdinalIgnoreCase))
                 {
@@ -654,6 +672,76 @@ namespace Server.CustomBots
         {
             return !String.IsNullOrEmpty(bot.DestinationName)
                 && bot.DestinationName.StartsWith("Wander: ", StringComparison.Ordinal);
+        }
+
+        // Banks are the shard's social hubs. These specially marked bots are
+        // spawned once around every Trammel bank and remain there, circulating
+        // in a small walkable area. Britain receives the intentionally larger
+        // crowd; everyone else still gets a visible local gathering.
+        private static void ReconcileBankHubs()
+        {
+            var map = Map.Trammel;
+            var banks = PlayerBotWorldData.GetDestinations(map, "Bank");
+            foreach (var bank in banks)
+            {
+                var source = BankHubPrefix + bank.Name;
+                var desired = String.Equals(bank.Name, "Britain Bank", StringComparison.OrdinalIgnoreCase)
+                    ? BritainBankCrowd : OtherBankCrowd;
+                var current = 0;
+                foreach (var bot in FindBots())
+                    if (!bot.Deleted && bot.Alive && bot.Map == map
+                        && String.Equals(bot.SpawnSource, source, StringComparison.OrdinalIgnoreCase)) current++;
+
+                while (current < desired && FindBots().Count < 250)
+                {
+                    SpawnBankHubBot(bank, map, source);
+                    current++;
+                }
+            }
+        }
+
+        private static void SpawnBankHubBot(PlayerBotDestination bank, Map map, string source)
+        {
+            var roleRoll = Utility.Random(10);
+            var role = roleRoll < 4 ? PlayerBotRole.Banker
+                : roleRoll < 7 ? PlayerBotRole.Townie
+                : roleRoll < 9 ? PlayerBotRole.Traveler
+                : PlayerBotRole.Adventurer;
+            var bot = new PlayerBot(role);
+            bot.SpawnSource = source;
+            bot.MoveToWorld(GetBankHubPoint(bank, map), map);
+            AssignBankHubWander(bot);
+        }
+
+        private static bool IsBankHubBot(PlayerBot bot)
+        {
+            return bot != null && !String.IsNullOrEmpty(bot.SpawnSource)
+                && bot.SpawnSource.StartsWith(BankHubPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool AssignBankHubWander(PlayerBot bot)
+        {
+            if (!IsBankHubBot(bot) || bot.Map == null || bot.Map == Map.Internal) return false;
+            var bankName = bot.SpawnSource.Substring(BankHubPrefix.Length);
+            var bank = PlayerBotWorldData.GetDestination(bankName, bot.Map);
+            if (bank == null) return false;
+            bot.Destination = GetBankHubPoint(bank, bot.Map);
+            bot.DestinationName = bank.Name + " crowd";
+            if (bot.RoutePoints != null) bot.RoutePoints.Clear();
+            bot.RouteIndex = 0;
+            return true;
+        }
+
+        private static Point3D GetBankHubPoint(PlayerBotDestination bank, Map map)
+        {
+            for (var attempt = 0; attempt < 24; attempt++)
+            {
+                var x = bank.X + Utility.RandomMinMax(-12, 12);
+                var y = bank.Y + Utility.RandomMinMax(-12, 12);
+                var z = map.GetAverageZ(x, y);
+                if (map.CanFit(x, y, z, 16, false, false)) return new Point3D(x, y, z);
+            }
+            return new Point3D(bank.X, bank.Y, bank.Z);
         }
 
         public static void ReportMurder(PlayerBot victim)
@@ -754,7 +842,7 @@ namespace Server.CustomBots
                 var removed = 0;
                 foreach (var bot in FindBots())
                 {
-                    if (String.IsNullOrEmpty(bot.SpawnSource)) continue;
+                    if (String.IsNullOrEmpty(bot.SpawnSource) || IsBankHubBot(bot)) continue;
                     bot.Delete();
                     removed++;
                 }

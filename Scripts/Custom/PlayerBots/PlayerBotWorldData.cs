@@ -251,6 +251,23 @@ namespace Server.CustomBots
             }
         }
 
+        // The bank-hub service consumes a snapshot so it never retains the
+        // XML store lock while creating or moving mobiles.
+        public static List<PlayerBotDestination> GetDestinations(Map map, string requiredKind)
+        {
+            var matches = new List<PlayerBotDestination>();
+            if (map == null || String.IsNullOrEmpty(requiredKind)) return matches;
+
+            lock (Sync)
+            {
+                foreach (var destination in _data.Destinations)
+                    if (String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        && String.Equals(destination.Kind, requiredKind, StringComparison.OrdinalIgnoreCase))
+                        matches.Add(destination);
+            }
+            return matches;
+        }
+
         // The graph import is data-only.  This is the single seam callers use
         // to turn that data into a safe, short-leg plan for a particular AoS
         // facet.  Every node and endpoint is checked against that facet before
