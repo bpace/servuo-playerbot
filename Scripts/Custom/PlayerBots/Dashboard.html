@@ -133,4 +133,39 @@ if(help){
  const renderBeforePlayers=render;render=function(){renderBeforePlayers();const players=(state.players||[]);summary.textContent='· '+state.count+' bots · '+players.length+' players';if(!liveToggle.checked||!livePlayers.checked)return;const d=dimensions(map.value),ctx=world.getContext('2d');ctx.save();players.filter(player=>player.map===map.value).forEach(player=>{const p=point(player,d);ctx.fillStyle=player.alive?'#ffe26d':'#a98f40';ctx.strokeStyle='#201b04';ctx.lineWidth=Math.max(1,1.5/camera.scale);ctx.beginPath();ctx.rect(p[0]-5,p[1]-5,10,10);ctx.fill();ctx.stroke();if(lLabels.checked&&camera.scale/camera.base>2){ctx.fillStyle='#fff1a3';ctx.font=Math.max(11,12/camera.scale)+'px system-ui';ctx.fillText(player.name,p[0]+8,p[1]-7)}});ctx.restore()};
  livePlayers.addEventListener('change',render);
 })();
+</script><script>
+// Keep the dense Bot World controls self-explanatory. Explicit titles win;
+// this adds a useful fallback to every button, section and live control.
+(()=>{
+ const hints={
+  'Layers':'Choose map data overlays.', 'Live':'Filter the live entities shown on the map.',
+  'Census details':'Inspect population counts, events and individual bots.',
+  'Edit tools':'Author this shard\'s PlayerBot route and spawn data.',
+  'Game actions':'Run controlled actions against the selected shard facet.',
+  'Legend & help':'Map controls, marker meanings and editor safety notes.',
+  'Enable':'Start PlayerBot behavior without creating a new population.',
+  'Disable':'Freeze PlayerBot behavior without deleting bots.',
+  '↻ Reload in game':'Reload this shard\'s PlayerBot world data.',
+  '✓ Audit facet paths':'Validate authored route legs on the selected facet.',
+  '⌘ Audit dungeon pads':'Check live dungeon teleporters and route eligibility.',
+  '♻ Regenerate bots in game':'Replace only bots owned by saved spawn definitions.',
+  'Set facet target':'Set the desired ordinary population for the selected facet.',
+  'Spawn now':'Create the requested number of bots on the selected facet.',
+  'Remove selected facet':'Delete every PlayerBot on the selected facet.',
+  'Remove all bots':'Delete every PlayerBot on every facet.',
+  'Materialize stored spawns':'Create any missing bots from saved spawn definitions.',
+  'Add waypoint':'Save a route waypoint at the entered coordinate.',
+  'Add destination':'Save a named destination at the entered coordinate.',
+  'Add zone at route point':'Save a rectangular navigation zone.',
+  'Save dungeon link':'Pair verified entrance and interior destinations.'
+ };
+ const annotate=()=>{
+  document.querySelectorAll('button, summary, h1, h2, h3, select, input[type="checkbox"], input[type="number"], input[type="text"]').forEach(node=>{
+   if(node.title)return;
+   const label=(node.getAttribute('aria-label')||node.textContent||node.placeholder||node.id||'control').trim().replace(/\s+/g,' ');
+   node.title=hints[label]||label+'. Hover for context; this control affects only the private PlayerBot dashboard.';
+  });
+ };
+ annotate(); new MutationObserver(annotate).observe(document.body,{childList:true,subtree:true});
+})();
 </script></body></html>

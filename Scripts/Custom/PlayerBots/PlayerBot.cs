@@ -64,6 +64,22 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public int BankSitterLayoutVersion { get; set; }
 
+        // UO Offline visitors keep a short-lived activity state separate from
+        // their travel identity.  A traveler can therefore use a bank, pause
+        // there, and then resume an ordinary trip instead of turning into a
+        // permanent bank sitter.
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string BankVisitName { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public Point3D BankVisitHome { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime BankVisitUntil { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime NextBankVisitAction { get; set; }
+
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -145,6 +161,10 @@ namespace Server.CustomBots
             BankSitterInitialized = false;
             BankWallSitter = false;
             BankSitterLayoutVersion = 0;
+            BankVisitName = "";
+            BankVisitHome = Point3D.Zero;
+            BankVisitUntil = DateTime.MinValue;
+            NextBankVisitAction = DateTime.MinValue;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -175,7 +195,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(6);
+            writer.Write(7);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -187,6 +207,10 @@ namespace Server.CustomBots
             writer.Write(BankSitterInitialized);
             writer.Write(BankWallSitter);
             writer.Write(BankSitterLayoutVersion);
+            writer.Write(BankVisitName);
+            writer.Write(BankVisitHome);
+            writer.Write(BankVisitUntil);
+            writer.Write(NextBankVisitAction);
             writer.Write(SpawnSource);
             writer.Write(DungeonReturnName);
             writer.Write(DungeonReturnAt);
@@ -215,6 +239,10 @@ namespace Server.CustomBots
             BankSitterInitialized = version >= 5 && reader.ReadBool();
             BankWallSitter = version >= 6 && reader.ReadBool();
             BankSitterLayoutVersion = version >= 6 ? reader.ReadInt() : 0;
+            BankVisitName = version >= 7 ? reader.ReadString() ?? "" : "";
+            BankVisitHome = version >= 7 ? reader.ReadPoint3D() : Point3D.Zero;
+            BankVisitUntil = version >= 7 ? reader.ReadDateTime() : DateTime.MinValue;
+            NextBankVisitAction = version >= 7 ? reader.ReadDateTime() : DateTime.MinValue;
             SpawnSource = version >= 1 ? reader.ReadString() ?? "" : "";
             DungeonReturnName = version >= 2 ? reader.ReadString() ?? "" : "";
             DungeonReturnAt = version >= 2 ? reader.ReadDateTime() : DateTime.MinValue;
