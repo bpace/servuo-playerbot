@@ -357,19 +357,6 @@ namespace Server.CustomBots
                 return;
             }
 
-            // Long hops become a visible public-moongate trip. This avoids
-            // teleporting every short walk while keeping the shard populated.
-            if ((bot.RoutePoints == null || bot.RouteIndex >= bot.RoutePoints.Count)
-                && String.IsNullOrEmpty(bot.DungeonTravelState)
-                && bot.GetDistanceToSqrt(bot.Destination) > 120 && Utility.RandomDouble() < 0.08)
-            {
-                bot.Say("I am taking the moongate to " + bot.DestinationName + ".");
-                bot.MoveToWorld(bot.Destination, bot.Map);
-                RecordEvent(bot.Name + " used a moongate to " + bot.DestinationName + ".");
-                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-                return;
-            }
-
             var direction = bot.GetDirectionTo(travelTarget) | Direction.Running;
             if (!bot.Move(direction))
             {
@@ -529,6 +516,16 @@ namespace Server.CustomBots
             }
             if (IsWanderDestination(bot))
             {
+                // Townies and bankers make several small circuits around a
+                // place before choosing a new destination.  This makes a
+                // watched street look inhabited instead of briefly crossed.
+                var keepWandering = bot.BotRole == PlayerBotRole.Townie
+                    || bot.BotRole == PlayerBotRole.Banker;
+                if (keepWandering && Utility.RandomDouble() < 0.72 && TryAssignLocalWander(bot))
+                {
+                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(3, 9));
+                    return;
+                }
                 AssignDestination(bot);
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(8, 20));
                 return;
@@ -594,7 +591,9 @@ namespace Server.CustomBots
             ClearNativeDungeonTrip(bot);
             for (var attempt = 0; attempt < 12; attempt++)
             {
-                var authored = PlayerBotWorldData.RandomDestination(bot.Map);
+                var authored = bot.BotRole == PlayerBotRole.Banker
+                    ? PlayerBotWorldData.RandomDestination(bot.Map, "Bank")
+                    : PlayerBotWorldData.RandomDestination(bot.Map);
                 if (authored == null) break;
                 if (String.Equals(authored.Kind, "DungeonEntrance", StringComparison.OrdinalIgnoreCase))
                 {
