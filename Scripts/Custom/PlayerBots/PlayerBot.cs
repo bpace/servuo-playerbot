@@ -58,6 +58,12 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public bool BankSitterInitialized { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public bool BankWallSitter { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public int BankSitterLayoutVersion { get; set; }
+
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -137,6 +143,8 @@ namespace Server.CustomBots
             BankHome = Point3D.Zero;
             NextBankAction = DateTime.MinValue;
             BankSitterInitialized = false;
+            BankWallSitter = false;
+            BankSitterLayoutVersion = 0;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -167,7 +175,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(5);
+            writer.Write(6);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -177,6 +185,8 @@ namespace Server.CustomBots
             writer.Write(BankHome);
             writer.Write(NextBankAction);
             writer.Write(BankSitterInitialized);
+            writer.Write(BankWallSitter);
+            writer.Write(BankSitterLayoutVersion);
             writer.Write(SpawnSource);
             writer.Write(DungeonReturnName);
             writer.Write(DungeonReturnAt);
@@ -203,6 +213,8 @@ namespace Server.CustomBots
             BankHome = version >= 5 ? reader.ReadPoint3D() : Point3D.Zero;
             NextBankAction = version >= 5 ? reader.ReadDateTime() : DateTime.MinValue;
             BankSitterInitialized = version >= 5 && reader.ReadBool();
+            BankWallSitter = version >= 6 && reader.ReadBool();
+            BankSitterLayoutVersion = version >= 6 ? reader.ReadInt() : 0;
             SpawnSource = version >= 1 ? reader.ReadString() ?? "" : "";
             DungeonReturnName = version >= 2 ? reader.ReadString() ?? "" : "";
             DungeonReturnAt = version >= 2 ? reader.ReadDateTime() : DateTime.MinValue;

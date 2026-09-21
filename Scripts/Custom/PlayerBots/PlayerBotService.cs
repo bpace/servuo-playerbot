@@ -29,6 +29,7 @@ namespace Server.CustomBots
         private static readonly TimeSpan BankHubReconcileInterval = TimeSpan.FromSeconds(20);
         private static DateTime _nextBankHubReconcile = DateTime.MinValue;
         private const string BankHubPrefix = "BankHub:";
+        private const int BankSitterLayoutVersion = 2;
         private const int TrammelBritainBankCrowd = 18;
         private const int TrammelOtherBankCrowd = 4;
         private const int FeluccaBritainBankCrowd = 12;
@@ -773,13 +774,25 @@ namespace Server.CustomBots
             var bank = PlayerBotWorldData.GetDestination(bankName, bot.Map);
             if (bank == null) return false;
 
-            if (!bot.BankSitterInitialized || bot.BankHome == Point3D.Zero)
+            if (!bot.BankSitterInitialized || bot.BankHome == Point3D.Zero
+                || bot.BankSitterLayoutVersion < BankSitterLayoutVersion)
             {
-                bot.BankHome = GetBankHubPoint(bank, bot.Map, bot);
-                bot.BankRole = RollBankSitterRole();
+                if (!bot.BankSitterInitialized) bot.BankRole = RollBankSitterRole();
+
+                var wallHome = Point3D.Zero;
+                var wallFacing = Direction.North;
+                bot.BankWallSitter = Utility.RandomDouble() < 0.80
+                    && TryGetBankWallHome(bank, bot.Map, bot, out wallHome, out wallFacing);
+                bot.BankHome = bot.BankWallSitter ? wallHome : GetBankHubPoint(bank, bot.Map, bot);
+                if (bot.BankWallSitter)
+                {
+                    bot.Direction = wallFacing;
+                    if (bot.Mount != null) bot.Mount.Rider = null;
+                }
                 bot.NextBankAction = DateTime.UtcNow + BankActionDelay(bot.BankRole);
                 bot.BankSitterInitialized = true;
-                if (relocateLegacyBot) bot.MoveToWorld(bot.BankHome, bot.Map);
+                bot.BankSitterLayoutVersion = BankSitterLayoutVersion;
+                if (relocateLegacyBot || bot.BankWallSitter) bot.MoveToWorld(bot.BankHome, bot.Map);
             }
 
             bot.Destination = bot.BankHome;
@@ -895,6 +908,40 @@ namespace Server.CustomBots
                 if (map.CanFit(x, y, z, 16, false, false) && IsBankHubPointFree(map, point, movingBot)) return point;
             }
             return new Point3D(bank.X, bank.Y, bank.Z);
+        }
+
+        // Direct ServUO adaptation of UO Offline PlayerBot.TryHugNearbyWall:
+        // standing tile is walkable, one cardinal neighbor is impassable, and
+        // the sitter faces away from the wall toward the room.
+        private static bool TryGetBankWallHome(PlayerBotDestination bank, Map map, PlayerBot movingBot, out Point3D home, out Direction facing)
+        {
+            var candidates = new List<KeyValuePair<Point3D, Direction>>();
+            for (var x = bank.X - 18; x <= bank.X + 18; x++)
+            for (var y = bank.Y - 18; y <= bank.Y + 18; y++)
+            {
+                var z = map.GetAverageZ(x, y);
+                var point = new Point3D(x, y, z);
+                if (!map.CanFit(x, y, z, 16, false, false) || !IsBankHubPointFree(map, point, movingBot)) continue;
+
+                Direction wall;
+                if (!map.CanFit(x, y - 1, z, 16, false, false)) wall = Direction.North;
+                else if (!map.CanFit(x + 1, y, z, 16, false, false)) wall = Direction.East;
+                else if (!map.CanFit(x, y + 1, z, 16, false, false)) wall = Direction.South;
+                else if (!map.CanFit(x - 1, y, z, 16, false, false)) wall = Direction.West;
+                else continue;
+                candidates.Add(new KeyValuePair<Point3D, Direction>(point, wall));
+            }
+
+            if (candidates.Count == 0)
+            {
+                home = Point3D.Zero;
+                facing = Direction.North;
+                return false;
+            }
+            var selected = candidates[Utility.Random(candidates.Count)];
+            home = selected.Key;
+            facing = (Direction)(((int)selected.Value + 4) & 7);
+            return true;
         }
 
         private static bool IsBankHubPointFree(Map map, Point3D point, PlayerBot movingBot)
