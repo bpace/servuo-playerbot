@@ -380,9 +380,9 @@ namespace Server.CustomBots
                 TickBankSitter(bot);
                 return;
             }
-            if (IsBankVisitor(bot))
+            if (IsDestinationVisitor(bot))
             {
-                TickBankVisitor(bot);
+                TickDestinationVisitor(bot);
                 return;
             }
             if (AdvanceNativeDungeonTravel(bot)) return;
@@ -581,7 +581,7 @@ namespace Server.CustomBots
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(350, 1800));
                 return;
             }
-            if (TryStartBankVisit(bot)) return;
+            if (TryStartDestinationVisit(bot)) return;
             if (IsWanderDestination(bot))
             {
                 // Townies and bankers make several small circuits around a
@@ -653,37 +653,44 @@ namespace Server.CustomBots
         }
 
         // ServUO adaptation of UO Offline VisitorBehavior: a normal traveler
-        // reaches a destination, spends a bounded session doing that activity,
-        // and then returns to the ordinary travel scheduler.  This deliberately
-        // does not reuse the permanent BankSitter role.
-        private static bool TryStartBankVisit(PlayerBot bot)
+        // reaches a destination, spends a bounded themed session there, then
+        // returns to the ordinary travel scheduler. It stays separate from
+        // permanent BankSitter fixtures.
+        private static bool TryStartDestinationVisit(PlayerBot bot)
         {
-            var bank = PlayerBotWorldData.GetDestination(bot.DestinationName, bot.Map);
-            if (bank == null || !String.Equals(bank.Kind, "Bank", StringComparison.OrdinalIgnoreCase)) return false;
+            var destination = PlayerBotWorldData.GetDestination(bot.DestinationName, bot.Map);
+            if (destination == null) return false;
 
-            bot.BankVisitName = bank.Name;
-            bot.BankVisitHome = GetBankVisitorPoint(bank, bot.Map, bot);
-            bot.BankVisitUntil = DateTime.UtcNow + TimeSpan.FromMinutes(Utility.RandomMinMax(2, 6));
+            var isBank = String.Equals(destination.Kind, "Bank", StringComparison.OrdinalIgnoreCase);
+            if (!isBank && !IsVisitorDestinationKind(destination.Kind)) return false;
+            if (!isBank && Utility.RandomDouble() > 0.85) return false;
+
+            bot.BankVisitName = destination.Name;
+            bot.BankVisitKind = destination.Kind;
+            bot.BankVisitHome = isBank
+                ? GetBankVisitorPoint(destination, bot.Map, bot)
+                : GetDestinationVisitorPoint(destination, bot.Map, bot);
+            bot.BankVisitUntil = DateTime.UtcNow + TimeSpan.FromMinutes(Utility.RandomMinMax(isBank ? 2 : 1, isBank ? 6 : 3));
             bot.NextBankVisitAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 35));
             bot.Destination = bot.BankVisitHome;
-            bot.DestinationName = "Visiting " + bank.Name;
+            bot.DestinationName = "Visiting " + destination.Name;
             if (bot.RoutePoints != null) bot.RoutePoints.Clear();
             bot.RouteIndex = 0;
             bot.NextAction = DateTime.UtcNow + MoveDelay();
             return true;
         }
 
-        private static bool IsBankVisitor(PlayerBot bot)
+        private static bool IsDestinationVisitor(PlayerBot bot)
         {
             return !IsBankHubBot(bot) && bot.BankVisitHome != Point3D.Zero;
         }
 
-        private static void TickBankVisitor(PlayerBot bot)
+        private static void TickDestinationVisitor(PlayerBot bot)
         {
             var now = DateTime.UtcNow;
             if (now >= bot.BankVisitUntil)
             {
-                RecordEvent(bot.Name + " finished a bank visit at " + bot.BankVisitName + ".");
+                RecordEvent(bot.Name + " finished visiting " + bot.BankVisitName + ".");
                 AssignDestination(bot);
                 bot.NextAction = now + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 7));
                 return;
@@ -700,7 +707,9 @@ namespace Server.CustomBots
                         bot.NextAction = now + TimeSpan.FromSeconds(5);
                         return;
                     }
-                    bot.BankVisitHome = GetBankVisitorPoint(bank, bot.Map, bot);
+                    bot.BankVisitHome = String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase)
+                        ? GetBankVisitorPoint(bank, bot.Map, bot)
+                        : GetDestinationVisitorPoint(bank, bot.Map, bot);
                     bot.Destination = bot.BankVisitHome;
                 }
                 bot.NextAction = now + MoveDelay();
@@ -713,11 +722,7 @@ namespace Server.CustomBots
                 return;
             }
 
-            var action = Utility.Random(100);
-            if (action < 22) bot.Say("bank");
-            else if (action < 34) bot.Say("Anyone looking for a hunt?");
-            else if (action < 48) bot.Animate(32, 5, 1, true, false, 0);
-            else if (action < 62) bot.Direction = (Direction)Utility.Random(8);
+            DoDestinationVisitAction(bot);
 
             bot.NextBankVisitAction = now + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 38));
             bot.NextAction = bot.NextBankVisitAction;
@@ -726,9 +731,78 @@ namespace Server.CustomBots
         private static void ClearBankVisit(PlayerBot bot)
         {
             bot.BankVisitName = "";
+            bot.BankVisitKind = "";
             bot.BankVisitHome = Point3D.Zero;
             bot.BankVisitUntil = DateTime.MinValue;
             bot.NextBankVisitAction = DateTime.MinValue;
+        }
+
+        private static bool IsVisitorDestinationKind(string kind)
+        {
+            return String.Equals(kind, "Healer", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Inn", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Stables", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Shrine", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void DoDestinationVisitAction(PlayerBot bot)
+        {
+            var action = Utility.Random(100);
+            if (String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action < 22) bot.Say("bank");
+                else if (action < 34) bot.Say("Anyone looking for a hunt?");
+                else if (action < 48) bot.Animate(32, 5, 1, true, false, 0);
+                else if (action < 62) bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            if (String.Equals(bot.BankVisitKind, "Healer", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action < 30) bot.Say("Could you tend this wound?");
+                else if (action < 52) bot.Animate(32, 5, 1, true, false, 0);
+                else bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            if (String.Equals(bot.BankVisitKind, "Inn", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action < 32) bot.Say("A real bed at last.");
+                else if (action < 52) bot.Say("Anyone have news from the roads?");
+                else bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            if (String.Equals(bot.BankVisitKind, "Stables", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action < 35) bot.Say("*feeds a horse an apple*");
+                else if (action < 55) bot.Animate(32, 5, 1, true, false, 0);
+                else bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            if (String.Equals(bot.BankVisitKind, "Shrine", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action < 55)
+                {
+                    bot.Animate(32, 5, 1, true, false, 0);
+                    var mantra = ShrineMantra(bot.BankVisitName);
+                    if (!String.IsNullOrEmpty(mantra)) bot.Say(mantra);
+                }
+                else bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            bot.Direction = (Direction)Utility.Random(8);
+        }
+
+        private static string ShrineMantra(string name)
+        {
+            var shrine = name ?? "";
+            if (shrine.IndexOf("Compassion", StringComparison.OrdinalIgnoreCase) >= 0) return "Mu";
+            if (shrine.IndexOf("Honesty", StringComparison.OrdinalIgnoreCase) >= 0) return "Ahm";
+            if (shrine.IndexOf("Honor", StringComparison.OrdinalIgnoreCase) >= 0) return "Summ";
+            if (shrine.IndexOf("Humility", StringComparison.OrdinalIgnoreCase) >= 0) return "Lum";
+            if (shrine.IndexOf("Justice", StringComparison.OrdinalIgnoreCase) >= 0) return "Beh";
+            if (shrine.IndexOf("Sacrifice", StringComparison.OrdinalIgnoreCase) >= 0) return "Cah";
+            if (shrine.IndexOf("Spirituality", StringComparison.OrdinalIgnoreCase) >= 0) return "Om";
+            if (shrine.IndexOf("Valor", StringComparison.OrdinalIgnoreCase) >= 0) return "Ra";
+            return "";
         }
 
         private static void AssignDestination(PlayerBot bot)
@@ -1029,6 +1103,19 @@ namespace Server.CustomBots
                 if (map.CanFit(x, y, z, 16, false, false) && IsBankHubPointFree(map, point, movingBot)) return point;
             }
             return new Point3D(bank.X, bank.Y, bank.Z);
+        }
+
+        private static Point3D GetDestinationVisitorPoint(PlayerBotDestination destination, Map map, PlayerBot movingBot)
+        {
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                var x = destination.X + Utility.RandomMinMax(-3, 3);
+                var y = destination.Y + Utility.RandomMinMax(-3, 3);
+                var z = map.GetAverageZ(x, y);
+                var point = new Point3D(x, y, z);
+                if (map.CanFit(x, y, z, 16, false, false) && IsBankHubPointFree(map, point, movingBot)) return point;
+            }
+            return new Point3D(destination.X, destination.Y, destination.Z);
         }
 
         // Direct ServUO adaptation of UO Offline PlayerBot.TryHugNearbyWall:
