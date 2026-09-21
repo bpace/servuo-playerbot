@@ -230,11 +230,20 @@ namespace Server.CustomBots
 
         public static PlayerBotDestination RandomDestination(Map map)
         {
+            return RandomDestination(map, null);
+        }
+
+        // Roles use this narrow selector to create a recognizable town
+        // presence.  In particular, bankers should be found at banks rather
+        // than visiting every service point with the rest of the population.
+        public static PlayerBotDestination RandomDestination(Map map, string requiredKind)
+        {
             lock (Sync)
             {
                 var matches = new List<PlayerBotDestination>();
                 foreach (var destination in _data.Destinations)
                     if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        && (String.IsNullOrEmpty(requiredKind) || String.Equals(destination.Kind, requiredKind, StringComparison.OrdinalIgnoreCase))
                         && !String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)
                         && !String.Equals(destination.Kind, "DungeonAscend", StringComparison.OrdinalIgnoreCase)
                         && !String.Equals(destination.Kind, "DungeonDescend", StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
