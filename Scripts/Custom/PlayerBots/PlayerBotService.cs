@@ -739,15 +739,37 @@ namespace Server.CustomBots
 
         private static bool IsVisitorDestinationKind(string kind)
         {
-            return String.Equals(kind, "Healer", StringComparison.OrdinalIgnoreCase)
+            return IsVendorDestinationKind(kind)
+                || String.Equals(kind, "Healer", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Inn", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Stables", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Shrine", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsVendorDestinationKind(string kind)
+        {
+            return !String.IsNullOrEmpty(kind)
+                && kind.StartsWith("Vendor", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void DoDestinationVisitAction(PlayerBot bot)
         {
             var action = Utility.Random(100);
+            if (IsVendorDestinationKind(bot.BankVisitKind))
+            {
+                // Mirrors UO Offline ShopperBehavior: presence, vendor speech,
+                // and facing are the visit itself. It does not invent a gold
+                // transfer until the separate BotShop transaction layer exists.
+                FaceNearestVendor(bot);
+                if (action < 48)
+                {
+                    var lines = new[] { "vendor buy", "vendor sell", "vendor view", "show me your wares", "let me see your goods" };
+                    bot.Say(lines[Utility.Random(lines.Length)]);
+                }
+                else if (action < 65) bot.Say("Just browsing, thank you.");
+                else if (action < 82) bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
             if (String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase))
             {
                 if (action < 22) bot.Say("bank");
@@ -789,6 +811,22 @@ namespace Server.CustomBots
                 return;
             }
             bot.Direction = (Direction)Utility.Random(8);
+        }
+
+        private static void FaceNearestVendor(PlayerBot bot)
+        {
+            IPooledEnumerable nearby = bot.GetMobilesInRange(8);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var vendor = mobile as BaseVendor;
+                    if (vendor == null || vendor.Deleted) continue;
+                    bot.Direction = bot.GetDirectionTo(vendor.Location);
+                    return;
+                }
+            }
+            finally { nearby.Free(); }
         }
 
         private static string ShrineMantra(string name)
