@@ -11,7 +11,8 @@ namespace Server.CustomBots
         Banker,
         Adventurer,
         Townie,
-        PlayerKiller
+        PlayerKiller,
+        Thief
     }
 
     // A persistent PlayerMobile without a NetState. It deliberately uses
@@ -95,6 +96,12 @@ namespace Server.CustomBots
                 Skills[SkillName.Swords].Base = 90;
                 Skills[SkillName.Tactics].Base = 90;
                 Skills[SkillName.Anatomy].Base = 80;
+            }
+            else if (role == PlayerBotRole.Thief)
+            {
+                RawDex = 100;
+                Skills[SkillName.Stealing].Base = 75;
+                Skills[SkillName.Hiding].Base = 65;
             }
             Hits = HitsMax;
             Stam = StamMax;
