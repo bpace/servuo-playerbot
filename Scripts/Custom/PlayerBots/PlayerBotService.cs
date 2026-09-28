@@ -15,6 +15,10 @@ namespace Server.CustomBots
         // Safe default for an online shard. An administrator must explicitly
         // set a population and enable the mod after a backup.
         public static bool Enabled = false;
+        // Native player theft has real item and criminal consequences. It is
+        // deployed disabled and needs an explicit in-game GM enable after a
+        // consenting disposable-character test is arranged.
+        public static bool NativeThievingEnabled = false;
         // Targets are facet-specific. A target only reconciles bots already
         // assigned to that facet, so choosing Trammel never drags a bot back
         // to Felucca.
@@ -186,6 +190,13 @@ namespace Server.CustomBots
                 if (Enabled) ReconcilePopulation();
                 RecordEvent("GM turned PlayerBots " + (Enabled ? "on" : "off") + ".");
                 e.Mobile.SendMessage("PlayerBots are {0}.", Enabled ? "on" : "off");
+                return;
+            }
+            if (action == "thieving")
+            {
+                NativeThievingEnabled = e.Length > 1 && String.Equals(e.GetString(1), "on", StringComparison.OrdinalIgnoreCase);
+                e.Mobile.SendMessage("Native PlayerBot thieving is {0}.", NativeThievingEnabled ? "enabled" : "disabled");
+                RecordEvent("GM " + (NativeThievingEnabled ? "enabled" : "disabled") + " native PlayerBot thieving.");
                 return;
             }
             if (action == "remove")
@@ -457,6 +468,7 @@ namespace Server.CustomBots
         // Stealing target cursor. It never moves an item directly.
         private static bool TryThief(PlayerBot bot)
         {
+            if (!NativeThievingEnabled) return false;
             if (DateTime.UtcNow < bot.NextThiefAction) return false;
             if (bot.Criminal)
             {
