@@ -86,6 +86,21 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime NextBankVisitAction { get; set; }
 
+        // A rare bank visitor can temporarily use a street-character mode.
+        // Target state is stored as a serial so a restart never keeps a live
+        // object reference or lets a follow escape the normal validation.
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string BankVisitMode { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public int BankVisitFollowSerial { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime BankVisitFollowUntil { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime NextBankVisitFollow { get; set; }
+
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -172,6 +187,10 @@ namespace Server.CustomBots
             BankVisitHome = Point3D.Zero;
             BankVisitUntil = DateTime.MinValue;
             NextBankVisitAction = DateTime.MinValue;
+            BankVisitMode = "";
+            BankVisitFollowSerial = 0;
+            BankVisitFollowUntil = DateTime.MinValue;
+            NextBankVisitFollow = DateTime.MinValue;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -202,7 +221,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(8);
+            writer.Write(9);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -230,6 +249,10 @@ namespace Server.CustomBots
             writer.Write(DungeonInteriorName);
             writer.Write(DungeonLanding);
             writer.Write(DungeonReturnPad);
+            writer.Write(BankVisitMode);
+            writer.Write(BankVisitFollowSerial);
+            writer.Write(BankVisitFollowUntil);
+            writer.Write(NextBankVisitFollow);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -267,6 +290,10 @@ namespace Server.CustomBots
             DungeonInteriorName = version >= 4 ? reader.ReadString() ?? "" : "";
             DungeonLanding = version >= 4 ? reader.ReadPoint3D() : Point3D.Zero;
             DungeonReturnPad = version >= 4 ? reader.ReadPoint3D() : Point3D.Zero;
+            BankVisitMode = version >= 9 ? reader.ReadString() ?? "" : "";
+            BankVisitFollowSerial = version >= 9 ? reader.ReadInt() : 0;
+            BankVisitFollowUntil = version >= 9 ? reader.ReadDateTime() : DateTime.MinValue;
+            NextBankVisitFollow = version >= 9 ? reader.ReadDateTime() : DateTime.MinValue;
             Player = false;
         }
     }
