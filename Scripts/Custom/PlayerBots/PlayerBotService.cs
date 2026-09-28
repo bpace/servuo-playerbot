@@ -772,6 +772,7 @@ namespace Server.CustomBots
             return IsVendorDestinationKind(kind)
                 || String.Equals(kind, "Healer", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Inn", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Tavern", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Stables", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Shrine", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Graveyard", StringComparison.OrdinalIgnoreCase);
@@ -832,6 +833,14 @@ namespace Server.CustomBots
                 if (action < 32) bot.Say("A real bed at last.");
                 else if (action < 52) bot.Say("Anyone have news from the roads?");
                 else bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            if (String.Equals(bot.BankVisitKind, "Tavern", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action < 30) bot.Say("Any hunters looking for company?");
+                else if (action < 52) bot.Say("A drink and a tale from the road.");
+                else if (action < 70) bot.Say("Looking for a party before nightfall.");
+                else if (action < 84) bot.Direction = (Direction)Utility.Random(8);
                 return;
             }
             if (String.Equals(bot.BankVisitKind, "Stables", StringComparison.OrdinalIgnoreCase))
