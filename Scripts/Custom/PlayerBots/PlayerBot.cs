@@ -101,6 +101,9 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime NextBankVisitFollow { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime NextThiefAction { get; set; }
+
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -191,6 +194,7 @@ namespace Server.CustomBots
             BankVisitFollowSerial = 0;
             BankVisitFollowUntil = DateTime.MinValue;
             NextBankVisitFollow = DateTime.MinValue;
+            NextThiefAction = DateTime.MinValue;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -221,7 +225,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(9);
+            writer.Write(10);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -253,6 +257,7 @@ namespace Server.CustomBots
             writer.Write(BankVisitFollowSerial);
             writer.Write(BankVisitFollowUntil);
             writer.Write(NextBankVisitFollow);
+            writer.Write(NextThiefAction);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -294,6 +299,7 @@ namespace Server.CustomBots
             BankVisitFollowSerial = version >= 9 ? reader.ReadInt() : 0;
             BankVisitFollowUntil = version >= 9 ? reader.ReadDateTime() : DateTime.MinValue;
             NextBankVisitFollow = version >= 9 ? reader.ReadDateTime() : DateTime.MinValue;
+            NextThiefAction = version >= 10 ? reader.ReadDateTime() : DateTime.MinValue;
             Player = false;
         }
     }

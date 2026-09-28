@@ -4,6 +4,7 @@ using Server.Commands;
 using Server.Gumps;
 using Server.Items;
 using Server.Mobiles;
+using Server.SkillHandlers;
 
 namespace Server.CustomBots
 {
@@ -422,6 +423,8 @@ namespace Server.CustomBots
 
         private static bool TryFight(PlayerBot bot)
         {
+            if (bot.BotRole == PlayerBotRole.Thief)
+                return bot.Map == Map.Felucca && TryThief(bot);
             if (bot.BotRole == PlayerBotRole.PlayerKiller)
                 return bot.Map == Map.Felucca && TryFightPlayer(bot);
             if (bot.Combatant is Mobile current && !current.Deleted && current.Alive && bot.InRange(current, 12))
@@ -446,6 +449,48 @@ namespace Server.CustomBots
                 }
             }
             finally { nearby.Free(); }
+            return false;
+        }
+
+        // The engine owns the actual theft result. This selects only an
+        // eligible nearby Felucca player/item, then invokes ServUO's native
+        // Stealing target cursor. It never moves an item directly.
+        private static bool TryThief(PlayerBot bot)
+        {
+            if (DateTime.UtcNow < bot.NextThiefAction) return false;
+            if (bot.Criminal)
+            {
+                try { Hiding.OnUse(bot); } catch { }
+                bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(8, 16));
+                return true;
+            }
+            IPooledEnumerable nearby = bot.GetMobilesInRange(8);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var mark = mobile as PlayerMobile;
+                    if (mark == null || mark is PlayerBot || !mark.Player || mark.Deleted || !mark.Alive || mark.IsStaff()
+                        || mark.Map != Map.Felucca || mark.Backpack == null || !bot.InRange(mark, 1)) continue;
+                    Item item = null;
+                    foreach (Item candidate in mark.Backpack.Items)
+                    {
+                        if (candidate == null || candidate.Deleted || !candidate.Movable || candidate is Container
+                            || candidate.LootType == LootType.Newbied || candidate.TotalWeight + candidate.Weight > 10) continue;
+                        item = candidate;
+                        break;
+                    }
+                    if (item == null) continue;
+                    bot.NpcGuild = NpcGuild.ThievesGuild;
+                    Stealing.OnUse(bot);
+                    if (bot.Target != null) bot.Target.Invoke(bot, item);
+                    bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromMinutes(4);
+                    RecordEvent(bot.Name + " attempted a native theft in Felucca.");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 30));
             return false;
         }
 
