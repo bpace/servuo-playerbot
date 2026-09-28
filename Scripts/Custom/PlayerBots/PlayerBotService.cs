@@ -682,11 +682,23 @@ namespace Server.CustomBots
 
             bot.BankVisitName = destination.Name;
             bot.BankVisitKind = destination.Kind;
+            bot.BankVisitMode = "";
+            bot.BankVisitFollowSerial = 0;
+            bot.BankVisitFollowUntil = DateTime.MinValue;
+            bot.NextBankVisitFollow = DateTime.MinValue;
+            if (isBank)
+            {
+                var streetRoll = Utility.RandomDouble();
+                if (streetRoll < 0.08) bot.BankVisitMode = "Beggar";
+                else if (streetRoll < 0.15) bot.BankVisitMode = "Newbie";
+            }
             bot.BankVisitHome = isBank
                 ? GetBankVisitorPoint(destination, bot.Map, bot)
                 : GetDestinationVisitorPoint(destination, bot.Map, bot);
+            var streetVisit = !String.IsNullOrEmpty(bot.BankVisitMode);
             bot.BankVisitUntil = DateTime.UtcNow + TimeSpan.FromMinutes(isGraveyard
                 ? Utility.RandomMinMax(5, 15)
+                : streetVisit ? Utility.RandomMinMax(10, 25)
                 : Utility.RandomMinMax(isBank ? 2 : 1, isBank ? 6 : 3));
             bot.NextBankVisitAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 35));
             bot.Destination = bot.BankVisitHome;
@@ -721,6 +733,8 @@ namespace Server.CustomBots
                 bot.NextAction = now + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 7));
                 return;
             }
+
+            if (TryTickBankStreetFollow(bot, now)) return;
 
             if (!bot.InRange(bot.BankVisitHome, 1))
             {
@@ -765,6 +779,57 @@ namespace Server.CustomBots
             bot.BankVisitHome = Point3D.Zero;
             bot.BankVisitUntil = DateTime.MinValue;
             bot.NextBankVisitAction = DateTime.MinValue;
+            bot.BankVisitMode = "";
+            bot.BankVisitFollowSerial = 0;
+            bot.BankVisitFollowUntil = DateTime.MinValue;
+            bot.NextBankVisitFollow = DateTime.MinValue;
+        }
+
+        private static bool TryTickBankStreetFollow(PlayerBot bot, DateTime now)
+        {
+            if (!String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase)
+                || String.IsNullOrEmpty(bot.BankVisitMode)) return false;
+
+            if (bot.BankVisitFollowSerial != 0)
+            {
+                var target = World.FindMobile((Serial)bot.BankVisitFollowSerial) as PlayerMobile;
+                if (IsStreetFollowTarget(bot, target) && now < bot.BankVisitFollowUntil)
+                {
+                    if (!bot.InRange(target, 1)) bot.Move(bot.GetDirectionTo(target) | Direction.Running);
+                    bot.NextAction = now + TimeSpan.FromMilliseconds(Utility.RandomMinMax(550, 950));
+                    return true;
+                }
+                bot.BankVisitFollowSerial = 0;
+                bot.BankVisitFollowUntil = DateTime.MinValue;
+            }
+
+            if (now < bot.NextBankVisitFollow) return false;
+            IPooledEnumerable nearby = bot.GetMobilesInRange(8);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var player = mobile as PlayerMobile;
+                    if (!IsStreetFollowTarget(bot, player)) continue;
+                    bot.BankVisitFollowSerial = player.Serial.Value;
+                    bot.BankVisitFollowUntil = now + TimeSpan.FromSeconds(25);
+                    bot.NextBankVisitFollow = now + TimeSpan.FromMinutes(4);
+                    bot.Say(String.Equals(bot.BankVisitMode, "Beggar", StringComparison.OrdinalIgnoreCase)
+                        ? "Spare a coin for a hungry soul?"
+                        : "Hello! Is this Britain Bank?");
+                    bot.NextAction = now + TimeSpan.FromMilliseconds(Utility.RandomMinMax(550, 950));
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            bot.NextBankVisitFollow = now + TimeSpan.FromMinutes(4);
+            return false;
+        }
+
+        private static bool IsStreetFollowTarget(PlayerBot bot, PlayerMobile player)
+        {
+            return player != null && player.Player && !(player is PlayerBot) && !player.Deleted
+                && player.Alive && !player.IsStaff() && player.Map == bot.Map && bot.InRange(player, 12);
         }
 
         private static bool IsVisitorDestinationKind(string kind)
@@ -815,6 +880,20 @@ namespace Server.CustomBots
             }
             if (String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase))
             {
+                if (String.Equals(bot.BankVisitMode, "Beggar", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (action < 45) bot.Say("Spare a coin for a warm meal?");
+                    else if (action < 68) bot.Say("The roads have been hard lately.");
+                    else bot.Direction = (Direction)Utility.Random(8);
+                    return;
+                }
+                if (String.Equals(bot.BankVisitMode, "Newbie", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (action < 42) bot.Say("Could someone point me toward the healer?");
+                    else if (action < 65) bot.Say("I just arrived in town.");
+                    else bot.Direction = (Direction)Utility.Random(8);
+                    return;
+                }
                 if (action < 22) bot.Say("bank");
                 else if (action < 34) bot.Say("Anyone looking for a hunt?");
                 else if (action < 48) bot.Animate(32, 5, 1, true, false, 0);
