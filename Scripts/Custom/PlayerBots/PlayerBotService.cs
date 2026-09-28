@@ -1263,10 +1263,8 @@ namespace Server.CustomBots
                     TryBankSitterSpeech(bot, new[] { "bank", "LFG", "WTB regs", "anyone headed to a dungeon?" }, 0.25);
                     break;
                 case PlayerBotBankRole.Hawker:
-                    // UO Offline hawkers advertise actual BotShop stock. The
-                    // ServUO port has no trade inventory yet, so it retains
-                    // their cadence without inventing items for sale.
-                    TryBankSitterSpeech(bot, new[] { "WTB regs", "buying ingots", "looking for a hunting group" }, 0.55);
+                    var wts = PlayerBotShop.WtsLine(bot);
+                    if (!String.IsNullOrEmpty(wts) && Utility.RandomDouble() < 0.55) bot.Say(wts);
                     break;
                 case PlayerBotBankRole.ResistMacro:
                     bot.Animate(32, 5, 1, true, false, 0);
