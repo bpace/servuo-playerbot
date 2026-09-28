@@ -582,6 +582,14 @@ namespace Server.CustomBots
                 return;
             }
             if (TryStartDestinationVisit(bot)) return;
+            if (IsGraveyardDestination(bot))
+            {
+                // UO Offline does not leave a Traveler idling at a dangerous
+                // graveyard after declining its Adventurer handoff.
+                AssignDestination(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+                return;
+            }
             if (IsWanderDestination(bot))
             {
                 // Townies and bankers make several small circuits around a
@@ -662,15 +670,24 @@ namespace Server.CustomBots
             if (destination == null) return false;
 
             var isBank = String.Equals(destination.Kind, "Bank", StringComparison.OrdinalIgnoreCase);
+            var isGraveyard = String.Equals(destination.Kind, "Graveyard", StringComparison.OrdinalIgnoreCase);
             if (!isBank && !IsVisitorDestinationKind(destination.Kind)) return false;
-            if (!isBank && Utility.RandomDouble() > 0.85) return false;
+            if (isGraveyard && bot.BotRole != PlayerBotRole.Traveler && bot.BotRole != PlayerBotRole.Adventurer)
+                return false;
+            // Upstream hands a Traveler off at a graveyard 75% of the time.
+            // A declined handoff leaves immediately in Arrive, never idling
+            // in a dangerous place as a generic traveler.
+            if (isGraveyard && Utility.RandomDouble() > 0.75) return false;
+            if (!isBank && !isGraveyard && Utility.RandomDouble() > 0.85) return false;
 
             bot.BankVisitName = destination.Name;
             bot.BankVisitKind = destination.Kind;
             bot.BankVisitHome = isBank
                 ? GetBankVisitorPoint(destination, bot.Map, bot)
                 : GetDestinationVisitorPoint(destination, bot.Map, bot);
-            bot.BankVisitUntil = DateTime.UtcNow + TimeSpan.FromMinutes(Utility.RandomMinMax(isBank ? 2 : 1, isBank ? 6 : 3));
+            bot.BankVisitUntil = DateTime.UtcNow + TimeSpan.FromMinutes(isGraveyard
+                ? Utility.RandomMinMax(5, 15)
+                : Utility.RandomMinMax(isBank ? 2 : 1, isBank ? 6 : 3));
             bot.NextBankVisitAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 35));
             bot.Destination = bot.BankVisitHome;
             bot.DestinationName = "Visiting " + destination.Name;
@@ -690,6 +707,15 @@ namespace Server.CustomBots
             var now = DateTime.UtcNow;
             if (now >= bot.BankVisitUntil)
             {
+                // A timed Adventurer visit finishes after its active fight,
+                // not in the middle of it. Do not acquire a new target here.
+                var current = bot.Combatant as Mobile;
+                if (IsGraveyardVisit(bot) && current != null && !current.Deleted && current.Alive && bot.InRange(current, 12))
+                {
+                    if (!bot.InRange(current, 1)) bot.Move(bot.GetDirectionTo(current) | Direction.Running);
+                    bot.NextAction = now + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+                    return;
+                }
                 RecordEvent(bot.Name + " finished visiting " + bot.BankVisitName + ".");
                 AssignDestination(bot);
                 bot.NextAction = now + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 7));
@@ -716,12 +742,16 @@ namespace Server.CustomBots
                 return;
             }
 
+            if (IsGraveyardVisit(bot) && TryFight(bot))
+            {
+                bot.NextAction = now + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+                return;
+            }
             if (now < bot.NextBankVisitAction)
             {
                 bot.NextAction = bot.NextBankVisitAction;
                 return;
             }
-
             DoDestinationVisitAction(bot);
 
             bot.NextBankVisitAction = now + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 38));
@@ -743,7 +773,19 @@ namespace Server.CustomBots
                 || String.Equals(kind, "Healer", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Inn", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Stables", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(kind, "Shrine", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(kind, "Shrine", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Graveyard", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsGraveyardDestination(PlayerBot bot)
+        {
+            var destination = PlayerBotWorldData.GetDestination(bot.DestinationName, bot.Map);
+            return destination != null && String.Equals(destination.Kind, "Graveyard", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsGraveyardVisit(PlayerBot bot)
+        {
+            return String.Equals(bot.BankVisitKind, "Graveyard", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsVendorDestinationKind(string kind)
@@ -806,6 +848,22 @@ namespace Server.CustomBots
                     bot.Animate(32, 5, 1, true, false, 0);
                     var mantra = ShrineMantra(bot.BankVisitName);
                     if (!String.IsNullOrEmpty(mantra)) bot.Say(mantra);
+                }
+                else bot.Direction = (Direction)Utility.Random(8);
+                return;
+            }
+            if (IsGraveyardVisit(bot))
+            {
+                if (action < 30) bot.Say("The dead do not rest easy here.");
+                else if (action < 52) bot.Say("Keep your weapon ready.");
+                else if (action < 72)
+                {
+                    var graveyard = PlayerBotWorldData.GetDestination(bot.BankVisitName, bot.Map);
+                    if (graveyard != null)
+                    {
+                        bot.BankVisitHome = GetDestinationVisitorPoint(graveyard, bot.Map, bot);
+                        bot.Destination = bot.BankVisitHome;
+                    }
                 }
                 else bot.Direction = (Direction)Utility.Random(8);
                 return;
