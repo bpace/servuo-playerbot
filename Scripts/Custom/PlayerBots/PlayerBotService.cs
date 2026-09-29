@@ -19,6 +19,10 @@ namespace Server.CustomBots
         // deployed disabled and needs an explicit in-game GM enable after a
         // consenting disposable-character test is arranged.
         public static bool NativeThievingEnabled = false;
+        // This is intentionally process-local and normally zero. Native
+        // stealing only runs while the GM test command has selected one
+        // consenting player, then the target is cleared immediately.
+        private static int NativeThievingTestTargetSerial;
         // Targets are facet-specific. A target only reconciles bots already
         // assigned to that facet, so choosing Trammel never drags a bot back
         // to Felucca.
@@ -196,8 +200,16 @@ namespace Server.CustomBots
             if (action == "thieving")
             {
                 NativeThievingEnabled = e.Length > 1 && String.Equals(e.GetString(1), "on", StringComparison.OrdinalIgnoreCase);
+                NativeThievingTestTargetSerial = 0;
                 e.Mobile.SendMessage("Native PlayerBot thieving is {0}.", NativeThievingEnabled ? "enabled" : "disabled");
                 RecordEvent("GM " + (NativeThievingEnabled ? "enabled" : "disabled") + " native PlayerBot thieving.");
+                return;
+            }
+            if (action == "thievingtest")
+            {
+                var message = StartNativeThievingTest(e.Length > 1 ? String.Join(" ", e.Arguments, 1, e.Length - 1) : "");
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
                 return;
             }
             if (action == "remove")
@@ -208,7 +220,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void ReconcilePopulation()
@@ -513,12 +525,57 @@ namespace Server.CustomBots
             return false;
         }
 
-        // The engine owns the actual theft result. This selects only an
-        // eligible nearby Felucca player/item, then invokes ServUO's native
-        // Stealing target cursor. It never moves an item directly.
+        private static string StartNativeThievingTest(string playerName)
+        {
+            if (!NativeThievingEnabled) return "Native thieving is disabled. Use [PlayerBots thieving on] first.";
+            if (String.IsNullOrWhiteSpace(playerName)) return "Usage: [PlayerBots thievingtest <consenting player name>]";
+
+            PlayerMobile mark = null;
+            var matches = 0;
+            foreach (Mobile mobile in World.Mobiles.Values)
+            {
+                var candidate = mobile as PlayerMobile;
+                if (candidate == null || candidate is PlayerBot || candidate.Deleted || !candidate.Player
+                    || !String.Equals(candidate.Name, playerName, StringComparison.OrdinalIgnoreCase)) continue;
+                mark = candidate;
+                matches++;
+            }
+            if (matches != 1) return matches == 0 ? "No connected player matches '" + playerName + ".'" : "More than one player matches '" + playerName + ".' Use a unique character name.";
+            if (!mark.Alive || mark.IsStaff() || mark.Map != Map.Felucca || mark.Backpack == null)
+                return "The test player must be a live, non-staff character in Felucca with a backpack.";
+
+            PlayerBot thief = null;
+            foreach (var candidate in FindBots())
+            {
+                if (candidate.BotRole != PlayerBotRole.Thief || candidate.Deleted || !candidate.Alive || candidate.Map != Map.Felucca
+                    || !candidate.InRange(mark, 1)) continue;
+                thief = candidate;
+                break;
+            }
+            if (thief == null) return "Move a live Thief PlayerBot adjacent to the consenting test player, then retry.";
+            if (thief.Criminal) return "The selected thief is criminal. Wait for its criminal flag to clear before testing.";
+            if (FindStealableItem(mark) == null) return "The test player's top-level backpack needs one movable, non-newbied, non-container item weighing 10 stones or less.";
+
+            NativeThievingTestTargetSerial = mark.Serial.Value;
+            try
+            {
+                thief.NextThiefAction = DateTime.MinValue;
+                return TryThief(thief)
+                    ? "Native theft test attempted against consenting player " + mark.Name + ". Check the thief, backpack, criminal flag, and server log for the engine result."
+                    : "Native theft test could not start. Recheck adjacency, Felucca, and the disposable item.";
+            }
+            finally
+            {
+                NativeThievingTestTargetSerial = 0;
+            }
+        }
+
+        // The engine owns the actual theft result. The target is an explicit,
+        // one-shot GM test selection, then ServUO's native Stealing cursor
+        // resolves the attempt. This code never moves an item directly.
         private static bool TryThief(PlayerBot bot)
         {
-            if (!NativeThievingEnabled) return false;
+            if (!NativeThievingEnabled || NativeThievingTestTargetSerial == 0) return false;
             if (DateTime.UtcNow < bot.NextThiefAction) return false;
             if (bot.Criminal)
             {
@@ -526,34 +583,34 @@ namespace Server.CustomBots
                 bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(8, 16));
                 return true;
             }
-            IPooledEnumerable nearby = bot.GetMobilesInRange(8);
-            try
+            var mark = World.FindMobile((Serial)NativeThievingTestTargetSerial) as PlayerMobile;
+            if (!IsEligibleThievingTestTarget(bot, mark)) return false;
+            var item = FindStealableItem(mark);
+            if (item == null) return false;
+            bot.NpcGuild = NpcGuild.ThievesGuild;
+            Stealing.OnUse(bot);
+            if (bot.Target != null) bot.Target.Invoke(bot, item);
+            bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromMinutes(4);
+            RecordEvent(bot.Name + " attempted a native Felucca theft test against " + mark.Name + ".");
+            return true;
+        }
+
+        private static bool IsEligibleThievingTestTarget(PlayerBot bot, PlayerMobile mark)
+        {
+            return bot != null && mark != null && !(mark is PlayerBot) && mark.Player && !mark.Deleted && mark.Alive
+                && !mark.IsStaff() && bot.Map == Map.Felucca && mark.Map == Map.Felucca && mark.Backpack != null && bot.InRange(mark, 1);
+        }
+
+        private static Item FindStealableItem(PlayerMobile mark)
+        {
+            if (mark == null || mark.Backpack == null) return null;
+            foreach (Item candidate in mark.Backpack.Items)
             {
-                foreach (Mobile mobile in nearby)
-                {
-                    var mark = mobile as PlayerMobile;
-                    if (mark == null || mark is PlayerBot || !mark.Player || mark.Deleted || !mark.Alive || mark.IsStaff()
-                        || mark.Map != Map.Felucca || mark.Backpack == null || !bot.InRange(mark, 1)) continue;
-                    Item item = null;
-                    foreach (Item candidate in mark.Backpack.Items)
-                    {
-                        if (candidate == null || candidate.Deleted || !candidate.Movable || candidate is Container
-                            || candidate.LootType == LootType.Newbied || candidate.TotalWeight + candidate.Weight > 10) continue;
-                        item = candidate;
-                        break;
-                    }
-                    if (item == null) continue;
-                    bot.NpcGuild = NpcGuild.ThievesGuild;
-                    Stealing.OnUse(bot);
-                    if (bot.Target != null) bot.Target.Invoke(bot, item);
-                    bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromMinutes(4);
-                    RecordEvent(bot.Name + " attempted a native theft in Felucca.");
-                    return true;
-                }
+                if (candidate == null || candidate.Deleted || !candidate.Movable || candidate is Container
+                    || candidate.LootType == LootType.Newbied || candidate.TotalWeight + candidate.Weight > 10) continue;
+                return candidate;
             }
-            finally { nearby.Free(); }
-            bot.NextThiefAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 30));
-            return false;
+            return null;
         }
 
         private static bool TryFightPlayer(PlayerBot bot)

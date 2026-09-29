@@ -16,4 +16,8 @@ It shows the bot census, a coordinate map view, current target, bot state, and t
 
 Choose `Player Killer` in the stored-spawn editor and save an explicitly authored road location. The server accepts that role only at an unguarded Felucca point, revalidates it before materializing, and the `Spawn road PKs` action creates only those authored definitions. PK bots target real nearby players, never other PlayerBots, and use the normal ServUO combat and notoriety path. They remain inert until PlayerBots are enabled. Trammel, other protected facets, and guarded Felucca locations are rejected.
 
+## Native Felucca thief test
+
+The thief slice is disabled after every shard start and has no roaming-player target mode. A GM must first run `[PlayerBots thieving on]`, place a live Thief PlayerBot next to one named consenting, non-staff player in Felucca, give that player a disposable top-level backpack item of ten stones or less, then run `[PlayerBots thievingtest <player name>]`. The command selects that one player for one native ServUO `Stealing` cursor invocation and clears the selection before the next bot tick. It never moves an item itself. Check the item, criminal flag, and server log after the test, then run `[PlayerBots thieving off]`.
+
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.
