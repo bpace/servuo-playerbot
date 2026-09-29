@@ -86,6 +86,7 @@ namespace Server.CustomBots
         public static void Initialize()
         {
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
+            CommandSystem.Register("JoinBotParty", AccessLevel.Player, OnJoinBotPartyCommand);
             EventSink.WorldLoad += OnWorldLoad;
             PlayerBotWorldData.Initialize();
             PlayerBotBehaviorRegistry.Initialize();
@@ -242,6 +243,12 @@ namespace Server.CustomBots
                 return;
             }
             e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], labor miner|lumberjack|blacksmith, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+        }
+
+        private static void OnJoinBotPartyCommand(CommandEventArgs e)
+        {
+            var message = PlayerBotParties.InvitePlayer(e.Mobile);
+            e.Mobile.SendMessage(message);
         }
 
         private static void ReconcilePopulation()
