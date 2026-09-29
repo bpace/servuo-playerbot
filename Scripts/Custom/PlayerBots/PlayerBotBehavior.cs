@@ -29,6 +29,7 @@ namespace Server.CustomBots
             if (_initialized) return;
             _initialized = true;
             Register(new DeadPlayerBotBehavior());
+            Register(new CorpseRecoveryPlayerBotBehavior());
             Register(new BankSitterPlayerBotBehavior());
             Register(new DestinationVisitorPlayerBotBehavior());
             Register(new CombatPlayerBotBehavior());
@@ -68,6 +69,13 @@ namespace Server.CustomBots
             public override int Priority { get { return 900; } }
             public override bool Handles(PlayerBot bot) { return PlayerBotService.IsBankSitterBehavior(bot); }
             public override void Tick(PlayerBot bot) { PlayerBotService.TickBankSitterBehavior(bot); }
+        }
+
+        private sealed class CorpseRecoveryPlayerBotBehavior : PlayerBotBehavior
+        {
+            public override int Priority { get { return 950; } }
+            public override bool Handles(PlayerBot bot) { return PlayerBotService.HasCorpseRecoveryBehavior(bot); }
+            public override void Tick(PlayerBot bot) { PlayerBotService.TickCorpseRecoveryBehavior(bot); }
         }
 
         private sealed class DestinationVisitorPlayerBotBehavior : PlayerBotBehavior
