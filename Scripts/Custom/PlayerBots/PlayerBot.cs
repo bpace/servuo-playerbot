@@ -28,6 +28,14 @@ namespace Server.CustomBots
         StealthMacro
     }
 
+    public enum PlayerBotLaborKind
+    {
+        None,
+        Miner,
+        Lumberjack,
+        Blacksmith
+    }
+
     // A persistent PlayerMobile without a NetState. It deliberately uses
     // ServUO's native save format and combat/notoriety rules.
     public class PlayerBot : PlayerMobile
@@ -104,6 +112,15 @@ namespace Server.CustomBots
 
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime NextThiefAction { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public PlayerBotLaborKind LaborKind { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime LaborUntil { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime NextLaborAction { get; set; }
 
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
@@ -196,6 +213,9 @@ namespace Server.CustomBots
             BankVisitFollowUntil = DateTime.MinValue;
             NextBankVisitFollow = DateTime.MinValue;
             NextThiefAction = DateTime.MinValue;
+            LaborKind = PlayerBotLaborKind.None;
+            LaborUntil = DateTime.MinValue;
+            NextLaborAction = DateTime.MinValue;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -237,7 +257,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(10);
+            writer.Write(11);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -270,6 +290,9 @@ namespace Server.CustomBots
             writer.Write(BankVisitFollowUntil);
             writer.Write(NextBankVisitFollow);
             writer.Write(NextThiefAction);
+            writer.Write((int)LaborKind);
+            writer.Write(LaborUntil);
+            writer.Write(NextLaborAction);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -312,6 +335,9 @@ namespace Server.CustomBots
             BankVisitFollowUntil = version >= 9 ? reader.ReadDateTime() : DateTime.MinValue;
             NextBankVisitFollow = version >= 9 ? reader.ReadDateTime() : DateTime.MinValue;
             NextThiefAction = version >= 10 ? reader.ReadDateTime() : DateTime.MinValue;
+            LaborKind = version >= 11 ? (PlayerBotLaborKind)reader.ReadInt() : PlayerBotLaborKind.None;
+            LaborUntil = version >= 11 ? reader.ReadDateTime() : DateTime.MinValue;
+            NextLaborAction = version >= 11 ? reader.ReadDateTime() : DateTime.MinValue;
             Player = false;
         }
     }

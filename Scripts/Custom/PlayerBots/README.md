@@ -20,4 +20,8 @@ Choose `Player Killer` in the stored-spawn editor and save an explicitly authore
 
 The thief slice is disabled after every shard start and has no roaming-player target mode. A GM must first run `[PlayerBots thieving on]`, place a live Thief PlayerBot next to one named consenting, non-staff player in Felucca, give that player a disposable top-level backpack item of ten stones or less, then run `[PlayerBots thievingtest <player name>]`. The command selects that one player for one native ServUO `Stealing` cursor invocation and clears the selection before the next bot tick. It never moves an item itself. Check the item, criminal flag, and server log after the test, then run `[PlayerBots thieving off]`.
 
+## Native labor shifts
+
+`[PlayerBots labor miner]`, `[PlayerBots labor lumberjack]`, and `[PlayerBots labor blacksmith]` create one ten-minute worker at the GM's location. Miners and lumberjacks use ServUO's target-by-resource harvest macro against only an adjacent valid mountain/tree tile, so the shard controls resources, skill rolls, tool wear, and pack delivery. Blacksmiths call the native craft item pipeline for daggers, consume only real iron ingots already in their pack, and must stand by the usual forge/anvil. Labor is not part of the regular population and stops cleanly after its shift. Start the test beside the appropriate world resource or workshop; the mod never creates ore, logs, ingots, or crafted goods directly.
+
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.

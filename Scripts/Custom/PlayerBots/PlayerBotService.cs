@@ -212,6 +212,13 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage(message);
                 return;
             }
+            if (action == "labor")
+            {
+                var message = PlayerBotLabor.StartNear(e.Mobile, e.Length > 1 ? e.GetString(1) : "");
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
+                return;
+            }
             if (action == "remove")
             {
                 var bots = FindBots();
@@ -220,7 +227,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], labor miner|lumberjack|blacksmith, thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void ReconcilePopulation()
