@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Server.Items;
 using Server.Mobiles;
+using Server.Network;
 
 namespace Server.CustomBots
 {
@@ -220,6 +221,17 @@ namespace Server.CustomBots
         {
             PlayerBotService.ReportMurder(this);
             base.OnDeath(c);
+        }
+
+        public override bool HandlesOnSpeech(Mobile from)
+        {
+            return base.HandlesOnSpeech(from) || BankRole == PlayerBotBankRole.Hawker;
+        }
+
+        public override void OnSpeech(SpeechEventArgs e)
+        {
+            base.OnSpeech(e);
+            if (!e.Handled && PlayerBotShop.TryOpenShop(this, e.Mobile, e.Speech)) e.Handled = true;
         }
 
         public override void Serialize(GenericWriter writer)
