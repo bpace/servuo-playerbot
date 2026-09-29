@@ -107,6 +107,15 @@ namespace Server.CustomBots
                 return;
             }
 
+            // Dungeon parties share a destination, not a fabricated map move.
+            // Each member still takes its own validated route and activates its
+            // own live pad before normal follower behavior resumes.
+            if (!String.IsNullOrEmpty(bot.DungeonTravelState))
+            {
+                PlayerBotService.TickTravelBehavior(bot);
+                return;
+            }
+
             // Every member still uses the existing native combat adapter;
             // groups do not gain fabricated damage, loot, healing, or travel.
             var leaderTarget = leader.Combatant as Mobile;

@@ -182,6 +182,14 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage(message);
                 return;
             }
+            if (action == "partydungeontest")
+            {
+                var map = e.Length > 1 ? GetMap(e.GetString(1)) : e.Mobile.Map;
+                var message = StartNativePartyDungeonTest(map);
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
+                return;
+            }
             if (action == "population")
             {
                 SetTarget(SpawnFacet, Math.Max(0, Math.Min(250, e.Length > 1 ? e.GetInt32(1) : GetTarget(SpawnFacet))));
@@ -243,7 +251,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], labor miner|lumberjack|blacksmith, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void OnJoinBotPartyCommand(CommandEventArgs e)
@@ -388,6 +396,36 @@ namespace Server.CustomBots
             AssignNativeDungeonTrip(selected, trip);
             selected.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
             return "Native dungeon test assigned " + selected.Name + " to " + trip.Entrance.Name + ". It will walk and use the real pads.";
+        }
+
+        private static string StartNativePartyDungeonTest(Map map)
+        {
+            if (!Enabled) return "Enable PlayerBots before starting a native party dungeon test.";
+            PlayerBotWorldData.NativeDungeonTrip trip;
+            if (!PlayerBotWorldData.TryGetAnyNativeDungeonTrip(map, out trip))
+                return "No verified native dungeon trip is available on " + (map == null ? "this map" : map.Name) + ". Finish the facet audit first.";
+
+            foreach (var leader in FindBots())
+            {
+                var party = Server.Engines.PartySystem.Party.Get(leader);
+                if (party == null || party.Leader != leader || leader.Map != map || !leader.Alive) continue;
+                var members = new List<PlayerBot>();
+                foreach (var member in party.Members)
+                {
+                    var bot = member.Mobile as PlayerBot;
+                    if (bot == null || !bot.Alive || bot.Map != map || bot.BotRole == PlayerBotRole.PlayerKiller
+                        || !String.IsNullOrEmpty(bot.DungeonTravelState)) continue;
+                    members.Add(bot);
+                }
+                if (members.Count < 2) continue;
+                foreach (var bot in members)
+                {
+                    AssignNativeDungeonTrip(bot, trip);
+                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+                }
+                return "Native party dungeon test assigned " + members.Count + " bots led by " + leader.Name + " to " + trip.Entrance.Name + ". Each will use the verified real pads.";
+            }
+            return "No eligible native PlayerBot party with at least two living bot members is available on " + map.Name + ". Form a nearby party first.";
         }
 
         public static void EnsureDestination(PlayerBot bot)
