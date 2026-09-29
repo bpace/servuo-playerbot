@@ -411,6 +411,7 @@ namespace Server.CustomBots
                 ReconcileBankHubs();
                 _nextBankHubReconcile = now + BankHubReconcileInterval;
             }
+            PlayerBotParties.ReconcileAutonomousParties();
             foreach (var bot in FindBots()) Tick(bot);
         }
 
@@ -512,6 +513,20 @@ namespace Server.CustomBots
             // in TickTravelBehavior instead of claiming every service tick.
             if (bot.BotRole == PlayerBotRole.Thief || bot.BotRole == PlayerBotRole.PlayerKiller) return false;
             return bot.Combatant is Mobile || HasNearbyCreature(bot);
+        }
+
+        internal static bool IsEligibleForAutonomousParty(PlayerBot bot)
+        {
+            return bot != null && !bot.Deleted && bot.Alive && bot.Map != null && bot.Map != Map.Internal
+                && (bot.BotRole == PlayerBotRole.Traveler || bot.BotRole == PlayerBotRole.Adventurer)
+                && !IsBankHubBot(bot) && !IsDestinationVisitor(bot)
+                && bot.LaborKind == PlayerBotLaborKind.None && bot.CorpseRecoverySerial == 0
+                && String.IsNullOrEmpty(bot.DungeonTravelState);
+        }
+
+        internal static void RecordPartyEvent(string message)
+        {
+            RecordEvent(message);
         }
 
         internal static void TickCombatBehavior(PlayerBot bot)
