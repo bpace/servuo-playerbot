@@ -122,6 +122,12 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime NextLaborAction { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public int CorpseRecoverySerial { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime CorpseRecoveryUntil { get; set; }
+
         // Empty for manual/population bots. Stored-spawn bots retain the
         // definition that owns them so regenerate never touches others.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -216,6 +222,8 @@ namespace Server.CustomBots
             LaborKind = PlayerBotLaborKind.None;
             LaborUntil = DateTime.MinValue;
             NextLaborAction = DateTime.MinValue;
+            CorpseRecoverySerial = 0;
+            CorpseRecoveryUntil = DateTime.MinValue;
             SpawnSource = "";
             DungeonReturnName = "";
             DungeonReturnAt = DateTime.MinValue;
@@ -241,6 +249,7 @@ namespace Server.CustomBots
         {
             PlayerBotService.ReportMurder(this);
             base.OnDeath(c);
+            PlayerBotService.TrackCorpseRecovery(this, c as Corpse);
         }
 
         public override bool HandlesOnSpeech(Mobile from)
@@ -257,7 +266,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(11);
+            writer.Write(12);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -293,6 +302,8 @@ namespace Server.CustomBots
             writer.Write((int)LaborKind);
             writer.Write(LaborUntil);
             writer.Write(NextLaborAction);
+            writer.Write(CorpseRecoverySerial);
+            writer.Write(CorpseRecoveryUntil);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -338,6 +349,8 @@ namespace Server.CustomBots
             LaborKind = version >= 11 ? (PlayerBotLaborKind)reader.ReadInt() : PlayerBotLaborKind.None;
             LaborUntil = version >= 11 ? reader.ReadDateTime() : DateTime.MinValue;
             NextLaborAction = version >= 11 ? reader.ReadDateTime() : DateTime.MinValue;
+            CorpseRecoverySerial = version >= 12 ? reader.ReadInt() : 0;
+            CorpseRecoveryUntil = version >= 12 ? reader.ReadDateTime() : DateTime.MinValue;
             Player = false;
         }
     }

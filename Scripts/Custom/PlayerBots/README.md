@@ -24,4 +24,8 @@ The thief slice is disabled after every shard start and has no roaming-player ta
 
 `[PlayerBots labor miner]`, `[PlayerBots labor lumberjack]`, and `[PlayerBots labor blacksmith]` create one ten-minute worker at the GM's location. Miners and lumberjacks use ServUO's target-by-resource harvest macro against only an adjacent valid mountain/tree tile, so the shard controls resources, skill rolls, tool wear, and pack delivery. Blacksmiths call the native craft item pipeline for daggers, consume only real iron ingots already in their pack, and must stand by the usual forge/anvil. Labor is not part of the regular population and stops cleanly after its shift. Start the test beside the appropriate world resource or workshop; the mod never creates ore, logs, ingots, or crafted goods directly.
 
+## Death and corpse recovery
+
+When a PlayerBot dies, its exact ServUO corpse serial is recorded for ten minutes. After the existing resurrection flow, the bot walks back if necessary and calls the engine's owner self-loot path on only that corpse. The engine decides capacity, restores equipped and backpack items, and leaves any remaining items in place. A deleted, inaccessible, or expired corpse clears the recovery state without replacing lost items.
+
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.

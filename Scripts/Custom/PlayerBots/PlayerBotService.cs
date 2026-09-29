@@ -408,7 +408,59 @@ namespace Server.CustomBots
         {
             if (bot == null || bot.Alive) return;
             bot.Resurrect();
-            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+            bot.NextAction = DateTime.UtcNow + (bot.CorpseRecoverySerial != 0 ? TimeSpan.FromSeconds(2) : TimeSpan.FromMinutes(2));
+        }
+
+        internal static void TrackCorpseRecovery(PlayerBot bot, Corpse corpse)
+        {
+            if (bot == null || corpse == null || corpse.Deleted || corpse.Owner != bot) return;
+            bot.CorpseRecoverySerial = corpse.Serial.Value;
+            bot.CorpseRecoveryUntil = DateTime.UtcNow + TimeSpan.FromMinutes(10);
+            RecordEvent(bot.Name + " left a corpse and will reclaim it after resurrection.");
+        }
+
+        internal static bool HasCorpseRecoveryBehavior(PlayerBot bot)
+        {
+            return bot != null && bot.Alive && bot.CorpseRecoverySerial != 0;
+        }
+
+        internal static void TickCorpseRecoveryBehavior(PlayerBot bot)
+        {
+            if (bot == null) return;
+            if (DateTime.UtcNow >= bot.CorpseRecoveryUntil)
+            {
+                ClearCorpseRecovery(bot, "corpse recovery expired");
+                return;
+            }
+
+            var corpse = World.FindItem((Serial)bot.CorpseRecoverySerial) as Corpse;
+            if (corpse == null || corpse.Deleted || corpse.Owner != bot || corpse.Map != bot.Map)
+            {
+                ClearCorpseRecovery(bot, "corpse was gone or unreachable");
+                return;
+            }
+            if (!bot.InRange(corpse.GetWorldLocation(), 1))
+            {
+                bot.Move(bot.GetDirectionTo(corpse.GetWorldLocation()));
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(500);
+                return;
+            }
+
+            // This is ServUO's own owner-only self-loot path. It restores
+            // equipped and backpack items subject to the normal capacity and
+            // corpse rules; PlayerBots never copy or fabricate an item.
+            corpse.Open(bot, true);
+            if (corpse.Items.Count == 0 && (corpse.EquipItems == null || corpse.EquipItems.Count == 0))
+                ClearCorpseRecovery(bot, "reclaimed its corpse");
+            else
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        }
+
+        private static void ClearCorpseRecovery(PlayerBot bot, string outcome)
+        {
+            bot.CorpseRecoverySerial = 0;
+            bot.CorpseRecoveryUntil = DateTime.MinValue;
+            RecordEvent(bot.Name + " " + outcome + ".");
         }
 
         internal static bool IsBankSitterBehavior(PlayerBot bot)
