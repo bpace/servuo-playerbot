@@ -11,6 +11,8 @@ namespace Server.CustomBots
     {
         private static readonly Dictionary<int, DateTime> ManagedLeaders = new Dictionary<int, DateTime>();
         private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
+        private static DateTime NextAutonomousReconcile = DateTime.MinValue;
+        private static readonly TimeSpan AutonomousReconcileInterval = TimeSpan.FromSeconds(45);
 
         public static string FormNear(Mobile caller, int requestedCount)
         {
@@ -107,6 +109,13 @@ namespace Server.CustomBots
 
             // Every member still uses the existing native combat adapter;
             // groups do not gain fabricated damage, loot, healing, or travel.
+            var leaderTarget = leader.Combatant as Mobile;
+            if (bot != leader && leaderTarget != null && !leaderTarget.Deleted && leaderTarget.Alive
+                && bot.Map == leaderTarget.Map && bot.InRange(leaderTarget, 12) && bot.CanBeHarmful(leaderTarget, false))
+            {
+                bot.Combatant = leaderTarget;
+                bot.Warmode = true;
+            }
             if (PlayerBotService.ShouldFightBehavior(bot))
             {
                 PlayerBotService.TickCombatBehavior(bot);
@@ -127,6 +136,65 @@ namespace Server.CustomBots
                 return;
             }
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
+        }
+
+        // Groups begin only when compatible idle travelers are already close
+        // together. This is a local muster, not an invisible recall or map
+        // teleport, and the ordinary native Party remains the source of truth.
+        public static void ReconcileAutonomousParties()
+        {
+            var now = DateTime.UtcNow;
+            if (!Core.UOR || now < NextAutonomousReconcile) return;
+            NextAutonomousReconcile = now + AutonomousReconcileInterval;
+
+            foreach (var bot in PlayerBotService.FindBots())
+            {
+                var existing = Party.Get(bot);
+                if (existing == null || existing.Leader != bot || !ManagedLeaders.ContainsKey(bot.Serial.Value)) continue;
+                DateTime expires;
+                if (!ManagedLeaders.TryGetValue(bot.Serial.Value, out expires)) continue;
+                if (!bot.Alive || bot.Deleted || expires <= now)
+                {
+                    ManagedLeaders.Remove(bot.Serial.Value);
+                    existing.Disband();
+                    continue;
+                }
+                foreach (var member in new List<PartyMemberInfo>(existing.Members))
+                {
+                    var memberBot = member.Mobile as PlayerBot;
+                    if (memberBot != null && memberBot != bot && (!memberBot.Alive || memberBot.Deleted))
+                        existing.Remove(memberBot);
+                }
+            }
+
+            // One low-frequency formation attempt per reconciliation keeps the
+            // population social without turning every town arrival into a raid.
+            if (Utility.RandomDouble() >= 0.20) return;
+            foreach (var leader in PlayerBotService.FindBots())
+            {
+                if (!PlayerBotService.IsEligibleForAutonomousParty(leader) || Party.Get(leader) != null) continue;
+                var recruits = new List<PlayerBot> { leader };
+                foreach (var candidate in PlayerBotService.FindBots())
+                {
+                    if (candidate == leader || !PlayerBotService.IsEligibleForAutonomousParty(candidate)
+                        || Party.Get(candidate) != null || candidate.Map != leader.Map || !candidate.InRange(leader, 8)) continue;
+                    recruits.Add(candidate);
+                    if (recruits.Count == 4) break;
+                }
+                if (recruits.Count < 2) continue;
+                Form(recruits, "autonomous");
+                return;
+            }
+        }
+
+        private static void Form(List<PlayerBot> members, string kind)
+        {
+            var leader = members[0];
+            var party = new Party(leader);
+            leader.Party = party;
+            for (var i = 1; i < members.Count; i++) party.Add(members[i]);
+            ManagedLeaders[leader.Serial.Value] = DateTime.UtcNow + Lifetime;
+            PlayerBotService.RecordPartyEvent(leader.Name + " formed an " + kind + " party with " + members.Count + " bots.");
         }
     }
 }
