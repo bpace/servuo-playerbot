@@ -34,6 +34,6 @@ On UOR-or-later shards, `[PlayerBots party [2-10]` forms a normal ServUO `Party`
 
 ## Native bot guild
 
-`[PlayerBots guild [2-10]` creates or extends the persistent ServUO guild `PlayerBot Fellowship [PBF]` using nearby living, unguilded PlayerBots. It uses the engine's normal guild roster and notoriety rules. It cannot touch a real-player guild, and it does not recruit real players. That needs a separate player-initiated acceptance flow.
+`[PlayerBots guild [2-10]` creates or extends the persistent ServUO guild `PlayerBot Fellowship [PBF]` using nearby living, unguilded PlayerBots. It uses the engine's normal guild roster and notoriety rules. A player can join only by standing beside a living Fellowship bot and running `[JoinBotGuild`; the command rejects already-guilded players. Bots never solicit or change real-player membership themselves.
 
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.
