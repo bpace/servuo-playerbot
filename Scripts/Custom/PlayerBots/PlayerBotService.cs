@@ -219,6 +219,20 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage(message);
                 return;
             }
+            if (action == "party")
+            {
+                var message = PlayerBotParties.FormNear(e.Mobile, e.Length > 1 ? e.GetInt32(1) : 3);
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
+                return;
+            }
+            if (action == "guild")
+            {
+                var message = PlayerBotGuilds.FormNear(e.Mobile, e.Length > 1 ? e.GetInt32(1) : 3);
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
+                return;
+            }
             if (action == "remove")
             {
                 var bots = FindBots();
@@ -227,7 +241,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], labor miner|lumberjack|blacksmith, thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], labor miner|lumberjack|blacksmith, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void ReconcilePopulation()

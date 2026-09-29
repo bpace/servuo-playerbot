@@ -28,4 +28,12 @@ The thief slice is disabled after every shard start and has no roaming-player ta
 
 When a PlayerBot dies, its exact ServUO corpse serial is recorded for ten minutes. After the existing resurrection flow, the bot walks back if necessary and calls the engine's owner self-loot path on only that corpse. The engine decides capacity, restores equipped and backpack items, and leaves any remaining items in place. A deleted, inaccessible, or expired corpse clears the recovery state without replacing lost items.
 
+## Native bot-only parties
+
+On UOR-or-later shards, `[PlayerBots party [2-10]` forms a normal ServUO `Party` from at least two living, unpartied PlayerBots within 18 tiles of the GM. The party is intentionally transient and ends after 15 minutes or when its leader is lost. Members use the existing native combat and movement paths, with followers closing on their leader. The mod does not invent party damage, loot, healing, chat, or packets. Pre-UOR shards reject the command because native player parties did not exist in that era. Real-player party invitations are a separate opt-in adapter and are not sent by this bot-only slice.
+
+## Native bot guild
+
+`[PlayerBots guild [2-10]` creates or extends the persistent ServUO guild `PlayerBot Fellowship [PBF]` using nearby living, unguilded PlayerBots. It uses the engine's normal guild roster and notoriety rules. It cannot touch a real-player guild, and it does not recruit real players. That needs a separate player-initiated acceptance flow.
+
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.
