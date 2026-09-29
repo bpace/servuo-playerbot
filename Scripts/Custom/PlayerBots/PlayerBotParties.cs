@@ -58,6 +58,38 @@ namespace Server.CustomBots
             return ManagedLeaders.ContainsKey(party.Leader.Serial.Value);
         }
 
+        // Player membership is never automatic: the player runs this command
+        // and then completes ServUO's ordinary /accept invitation flow.
+        public static string InvitePlayer(Mobile player)
+        {
+            if (!Core.UOR)
+                return "Native parties require a UOR-or-later expansion. This shard is configured earlier than UOR.";
+            if (player == null || player.Deleted || !player.Alive || player.Map == null || player.Map == Map.Internal)
+                return "You must be alive on a normal game facet to join a PlayerBot party.";
+            if (Party.Get(player) != null)
+                return "Leave your current party before requesting a PlayerBot party.";
+
+            Party closest = null;
+            var closestDistance = Double.MaxValue;
+            foreach (var bot in PlayerBotService.FindBots())
+            {
+                var party = Party.Get(bot);
+                if (party == null || party.Leader != bot || !ManagedLeaders.ContainsKey(bot.Serial.Value)) continue;
+                if (party.Candidates.Contains(player))
+                    return "You already have an invitation from " + bot.Name + ". Type /accept or /decline.";
+                if (party.Members.Count + party.Candidates.Count >= Party.Capacity || !bot.InRange(player.Location, 18)) continue;
+                var distance = bot.GetDistanceToSqrt(player);
+                if (distance >= closestDistance) continue;
+                closest = party;
+                closestDistance = distance;
+            }
+            if (closest == null)
+                return "No nearby PlayerBot party has room. Form a bot party nearby or try again later.";
+
+            Party.Invite(closest.Leader, player);
+            return "Invitation sent from " + closest.Leader.Name + ". Type /accept to join for the remaining party run.";
+        }
+
         public static void Tick(PlayerBot bot)
         {
             var party = Party.Get(bot);
