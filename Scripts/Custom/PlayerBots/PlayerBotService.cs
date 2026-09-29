@@ -84,6 +84,7 @@ namespace Server.CustomBots
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
             EventSink.WorldLoad += OnWorldLoad;
             PlayerBotWorldData.Initialize();
+            PlayerBotBehaviorRegistry.Initialize();
             PlayerBotWorldData.StartFacetAudits();
             Enabled = PlayerBotWorldData.IsEnabled;
             // Actors need independent sub-second scheduling. Background work
@@ -375,34 +376,67 @@ namespace Server.CustomBots
 
         private static void Tick(PlayerBot bot)
         {
-            if (!bot.Alive)
-            {
-                if (DateTime.UtcNow >= bot.NextAction)
-                {
-                    bot.Resurrect();
-                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromMinutes(2);
-                }
-                return;
-            }
-            if (bot.Map == null || bot.Map == Map.Internal) return;
-
+            if (bot == null) return;
             if (DateTime.UtcNow < bot.NextAction) return;
-            if (IsBankHubBot(bot))
-            {
-                TickBankSitter(bot);
-                return;
-            }
-            if (IsDestinationVisitor(bot))
-            {
-                TickDestinationVisitor(bot);
-                return;
-            }
-            if (AdvanceNativeDungeonTravel(bot)) return;
-            if (TryFight(bot))
+            PlayerBotBehaviorRegistry.Tick(bot);
+        }
+
+        // Core behavior adapters keep the lifecycle registry's interface
+        // small. Optional packages can register a behavior without gaining
+        // ownership of the service timer, population reconciler, or engine
+        // mutation helpers.
+        internal static void TickDeadBehavior(PlayerBot bot)
+        {
+            if (bot == null || bot.Alive) return;
+            bot.Resurrect();
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+        }
+
+        internal static bool IsBankSitterBehavior(PlayerBot bot)
+        {
+            return IsBankHubBot(bot);
+        }
+
+        internal static void TickBankSitterBehavior(PlayerBot bot)
+        {
+            TickBankSitter(bot);
+        }
+
+        internal static bool IsDestinationVisitorBehavior(PlayerBot bot)
+        {
+            return IsDestinationVisitor(bot);
+        }
+
+        internal static void TickDestinationVisitorBehavior(PlayerBot bot)
+        {
+            TickDestinationVisitor(bot);
+        }
+
+        internal static bool ShouldFightBehavior(PlayerBot bot)
+        {
+            if (bot == null || bot.Map == null || bot.Map == Map.Internal) return false;
+            // Thief and PK behavior needs its original travel fallthrough
+            // when there is no actionable mark. Their native checks remain
+            // in TickTravelBehavior instead of claiming every service tick.
+            if (bot.BotRole == PlayerBotRole.Thief || bot.BotRole == PlayerBotRole.PlayerKiller) return false;
+            return bot.Combatant is Mobile || HasNearbyCreature(bot);
+        }
+
+        internal static void TickCombatBehavior(PlayerBot bot)
+        {
+            if (!TryFight(bot)) return;
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+        }
+
+        internal static void TickTravelBehavior(PlayerBot bot)
+        {
+            if (bot == null || bot.Map == null || bot.Map == Map.Internal) return;
+            if ((bot.BotRole == PlayerBotRole.Thief || bot.BotRole == PlayerBotRole.PlayerKiller) && TryFight(bot))
             {
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
                 return;
             }
+            if (AdvanceNativeDungeonTravel(bot)) return;
 
             EnsureDestination(bot);
             var travelTarget = bot.Destination;
@@ -430,6 +464,22 @@ namespace Server.CustomBots
                 AssignDestination(bot);
             }
             bot.NextAction = DateTime.UtcNow + MoveDelay();
+        }
+
+        private static bool HasNearbyCreature(PlayerBot bot)
+        {
+            IPooledEnumerable nearby = bot.GetMobilesInRange(8);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var creature = mobile as BaseCreature;
+                    if (creature != null && !creature.Deleted && creature.Alive && !creature.Controlled && !creature.Summoned
+                        && bot.CanBeHarmful(creature, false)) return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
         }
 
         private static bool TryFight(PlayerBot bot)
