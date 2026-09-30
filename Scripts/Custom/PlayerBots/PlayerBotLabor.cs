@@ -433,9 +433,9 @@ namespace Server.CustomBots
             }
             if (bot.InRange(bot.Destination, 2))
             {
-                if (FindBanker(bot) != null && PlayerBotShop.TrySellCraftedGoods(bot))
+                if (FindBanker(bot) != null && PlayerBotShop.TrySellLaborGoods(bot))
                 {
-                    PlayerBotService.RecordEvent(bot.Name + " delivered a crafted labor good to a bank hawker at " + bot.LaborReturnName + ".");
+                    PlayerBotService.RecordEvent(bot.Name + " delivered a labor good to a bank hawker at " + bot.LaborReturnName + ".");
                     ClearLabor(bot);
                     return;
                 }

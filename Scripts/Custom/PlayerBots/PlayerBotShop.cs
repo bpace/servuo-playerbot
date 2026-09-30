@@ -34,7 +34,7 @@ namespace Server.CustomBots
         }
     }
 
-    // Hawker stock is always a real item in the hawker's backpack. Crafted
+    // Hawker stock is always a real item in the hawker's backpack. Labor
     // goods arrive through a completed labor route; ordinary fallback stock
     // remains separate so a delivery never destroys an existing item.
     public static class PlayerBotShop
@@ -63,7 +63,7 @@ namespace Server.CustomBots
                 if (marker != null && marker.Stock != null && !marker.Stock.Deleted
                     && marker.Stock.Parent == bot.Backpack)
                 {
-                    if (IsCraftedGood(marker.Stock)) return marker.Stock;
+                    if (IsLaborGood(marker.Stock)) return marker.Stock;
                     if (fallback == null) fallback = marker.Stock;
                 }
             }
@@ -82,14 +82,15 @@ namespace Server.CustomBots
             return stock;
         }
 
-        // ServUO's standard vendor lists sell daggers for 21 gold and wooden
-        // shields for 30, while their corresponding buyback values are 10 and
-        // 15. A hawker pays that existing buyback value for a laborer's real
-        // craft and advertises the same item at the standard sale value.
-        public static bool TrySellCraftedGoods(PlayerBot worker)
+        // ServUO's standard vendor lists sell daggers for 21 gold, wooden
+        // shields for 30, fish for 6, and raw fish steaks for 3. Their
+        // corresponding buyback values are 10, 15, 1, and 1. A hawker pays
+        // that existing buyback value for a laborer's real good and advertises
+        // the same item at the standard sale value.
+        public static bool TrySellLaborGoods(PlayerBot worker)
         {
             if (worker == null || worker.Deleted || !worker.Alive || worker.Backpack == null || worker.Map == null) return false;
-            var goods = FindCraftedGoods(worker);
+            var goods = FindLaborGoods(worker);
             if (goods == null || goods.Deleted || goods.Amount <= 0) return false;
             var paymentAmount = WholesalePrice(goods);
             if (paymentAmount <= 0) return false;
@@ -137,6 +138,8 @@ namespace Server.CustomBots
             if (stock is Arrow) return stock.Amount;
             if (stock is Dagger) return stock.Amount * 21;
             if (stock is WoodenShield) return stock.Amount * 30;
+            if (stock is Fish) return stock.Amount * 6;
+            if (stock is RawFishSteak) return stock.Amount * 3;
             return 0;
         }
 
@@ -149,20 +152,22 @@ namespace Server.CustomBots
             if (stock is Arrow) return "arrows";
             if (stock is Dagger) return "daggers";
             if (stock is WoodenShield) return "wooden shields";
+            if (stock is Fish) return "fish";
+            if (stock is RawFishSteak) return "raw fish steaks";
             return "goods";
         }
 
-        private static bool IsCraftedGood(Item item)
+        private static bool IsLaborGood(Item item)
         {
-            return item is Dagger || item is WoodenShield;
+            return item is Dagger || item is WoodenShield || item is Fish || item is RawFishSteak;
         }
 
-        private static Item FindCraftedGoods(PlayerBot worker)
+        private static Item FindLaborGoods(PlayerBot worker)
         {
             if (worker.Backpack == null) return null;
             foreach (Item item in worker.Backpack.Items)
             {
-                if (IsCraftedGood(item)) return item;
+                if (IsLaborGood(item)) return item;
             }
             return null;
         }
@@ -171,6 +176,7 @@ namespace Server.CustomBots
         {
             if (goods is Dagger) return goods.Amount * 10;
             if (goods is WoodenShield) return goods.Amount * 15;
+            if (goods is Fish || goods is RawFishSteak) return goods.Amount;
             return 0;
         }
 
