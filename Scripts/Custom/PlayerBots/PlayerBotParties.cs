@@ -382,6 +382,7 @@ namespace Server.CustomBots
             {
                 if (!PlayerBotService.IsEligibleForAutonomousParty(leader) || Party.Get(leader) != null) continue;
                 var recruits = new List<PlayerBot> { leader };
+                var candidates = new List<PlayerBot>();
                 foreach (var candidate in PlayerBotService.FindBots())
                 {
                     if (candidate == leader || !PlayerBotService.IsEligibleForAutonomousParty(candidate)
@@ -389,6 +390,11 @@ namespace Server.CustomBots
                     // A native guild is a real social affiliation, so its
                     // members muster as a crew instead of mixing randomly.
                     if (candidate.Guild != leader.Guild) continue;
+                    candidates.Add(candidate);
+                }
+                SortBySocialAffinity(leader, candidates);
+                foreach (var candidate in candidates)
+                {
                     recruits.Add(candidate);
                     if (recruits.Count == 4) break;
                 }
@@ -405,11 +411,17 @@ namespace Server.CustomBots
             {
                 if (!IsTavernMusterCandidate(leader, null)) continue;
                 var recruits = new List<PlayerBot> { leader };
+                var candidates = new List<PlayerBot>();
                 foreach (var candidate in PlayerBotService.FindBots())
                 {
                     if (candidate == leader || Party.Get(candidate) != null || !IsTavernMusterCandidate(candidate, leader)) continue;
                     if (!String.Equals(candidate.BankVisitName, leader.BankVisitName, StringComparison.Ordinal)) continue;
                     if (candidate.Guild != leader.Guild) continue;
+                    candidates.Add(candidate);
+                }
+                SortBySocialAffinity(leader, candidates);
+                foreach (var candidate in candidates)
+                {
                     recruits.Add(candidate);
                     if (recruits.Count == 4) break;
                 }
@@ -433,12 +445,35 @@ namespace Server.CustomBots
             return leader == null || (bot.Map == leader.Map && bot.InRange(leader, 8));
         }
 
+        private static void SortBySocialAffinity(PlayerBot leader, List<PlayerBot> candidates)
+        {
+            candidates.Sort(delegate(PlayerBot left, PlayerBot right)
+            {
+                var affinity = GetSocialAffinity(leader, right).CompareTo(GetSocialAffinity(leader, left));
+                return affinity != 0 ? affinity : leader.GetDistanceToSqrt(left).CompareTo(leader.GetDistanceToSqrt(right));
+            });
+        }
+
+        private static int GetSocialAffinity(PlayerBot leader, PlayerBot candidate)
+        {
+            if (leader == null || candidate == null) return 0;
+            var affinity = 0;
+            if (leader.PreferredCompanionSerial == candidate.Serial.Value) affinity += 2;
+            if (candidate.PreferredCompanionSerial == leader.Serial.Value) affinity++;
+            return affinity;
+        }
+
         private static void Form(List<PlayerBot> members, string kind)
         {
             var leader = members[0];
             var party = new Party(leader);
             leader.Party = party;
             for (var i = 1; i < members.Count; i++) party.Add(members[i]);
+            if (members.Count > 1)
+            {
+                leader.PreferredCompanionSerial = members[1].Serial.Value;
+                for (var i = 1; i < members.Count; i++) members[i].PreferredCompanionSerial = leader.Serial.Value;
+            }
             ManagedLeaders[leader.Serial.Value] = DateTime.UtcNow + Lifetime;
             PlayerBotService.RecordPartyEvent(leader.Name + " formed an " + kind + " party with " + members.Count + " bots.");
         }

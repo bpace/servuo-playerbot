@@ -38,6 +38,8 @@ One in four tavern groups becomes a dungeon expedition only when that facet alre
 
 Autonomous parties use exact guild affiliation matching. Fellowship crews do not absorb unguilded bots, and unguilded groups do not absorb Fellowship members.
 
+Autonomous bot-only groups retain one persisted preferred companion from their most recent run. A later valid muster uses that affinity only to rank already eligible same-guild candidates, so it creates repeat companions without bypassing range, role, guild, combat, or labor checks.
+
 A player can instead lead a party by standing beside an eligible bot and using `[LeadBotParty`. Each use recruits one nearby bot through ServUO's native Party object. Player-led bots follow the player on the same facet and assist a valid combat target; they never teleport across a map or recruit players automatically.
 
 An idle Traveler or Adventurer visiting a tavern is eligible for that explicit player request. Joining ends the visitor session before party follow starts. Bank fixtures, combatants, laborers, recovery bots, and dungeon travelers remain ineligible.
