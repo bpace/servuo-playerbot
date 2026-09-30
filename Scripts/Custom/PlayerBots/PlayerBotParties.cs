@@ -195,6 +195,15 @@ namespace Server.CustomBots
         private static void TickPlayerLedParty(PlayerBot bot, Party party, Mobile leader)
         {
             if (leader == null || leader.Deleted || !PlayerLedLeaders.Contains(leader.Serial.Value)) return;
+            // A real player's party is never rebuilt or silently resumed by
+            // bots after that player's death. Leaving the native party here
+            // prevents a headless follower from remaining tied to a corpse.
+            if (!leader.Alive)
+            {
+                party.Remove(bot);
+                if (party.Members.Count <= 1) PlayerLedLeaders.Remove(leader.Serial.Value);
+                return;
+            }
             var target = leader.Combatant as Mobile;
             if (target != null && !target.Deleted && target.Alive && target.Map == bot.Map
                 && bot.InRange(target, 12) && bot.CanBeHarmful(target, false))
