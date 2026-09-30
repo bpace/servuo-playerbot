@@ -24,7 +24,7 @@ namespace Server.CustomBots
         {
             if (gm == null || gm.Map == null || gm.Map == Map.Internal) return "Stand in the world before starting a labor bot.";
             PlayerBotLaborKind kind;
-            if (!TryParse(requestedKind, out kind)) return "Usage: [PlayerBots labor miner|lumberjack|blacksmith|carpenter|fisher]";
+            if (!TryParse(requestedKind, out kind)) return "Usage: [PlayerBots labor miner|lumberjack|blacksmith|carpenter|fisher|cooker]";
 
             var bot = new PlayerBot(PlayerBotRole.Adventurer);
             bot.MoveToWorld(gm.Location, gm.Map);
@@ -84,6 +84,12 @@ namespace Server.CustomBots
                     TryFish(bot);
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(10, 16));
                     break;
+                case PlayerBotLaborKind.Cooker:
+                    TryBuyNearbyFish(bot);
+                    TryCarveFish(bot);
+                    TryCookFish(bot);
+                    bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
+                    break;
             }
         }
 
@@ -95,6 +101,7 @@ namespace Server.CustomBots
             else if (String.Equals(requestedKind, "blacksmith", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Blacksmith;
             else if (String.Equals(requestedKind, "carpenter", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Carpenter;
             else if (String.Equals(requestedKind, "fisher", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Fisher;
+            else if (String.Equals(requestedKind, "cooker", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Cooker;
             return kind != PlayerBotLaborKind.None;
         }
 
@@ -123,6 +130,11 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Fisher:
                     bot.Skills[SkillName.Fishing].Base = Math.Max(bot.Skills[SkillName.Fishing].Base, 75.0);
                     FindOrCreateFishingPole(bot);
+                    break;
+                case PlayerBotLaborKind.Cooker:
+                    bot.Skills[SkillName.Cooking].Base = Math.Max(bot.Skills[SkillName.Cooking].Base, 75.0);
+                    FindOrCreateButcherKnife(bot);
+                    FindOrCreateSkillet(bot);
                     break;
             }
         }
@@ -177,6 +189,24 @@ namespace Server.CustomBots
             return tool;
         }
 
+        private static ButcherKnife FindOrCreateButcherKnife(PlayerBot bot)
+        {
+            var tool = bot.Backpack == null ? null : bot.Backpack.FindItemByType<ButcherKnife>();
+            if (tool != null && !tool.Deleted) return tool;
+            tool = new ButcherKnife();
+            bot.AddToBackpack(tool);
+            return tool;
+        }
+
+        private static Skillet FindOrCreateSkillet(PlayerBot bot)
+        {
+            var tool = bot.Backpack == null ? null : bot.Backpack.FindItemByType<Skillet>();
+            if (tool != null && !tool.Deleted) return tool;
+            tool = new Skillet();
+            bot.AddToBackpack(tool);
+            return tool;
+        }
+
         // Fishing.System owns range, water-tile validation, resource banks,
         // skill checks, catch selection, pack delivery, and pole wear. The
         // labor adapter only selects a nearby land-water tile and invokes the
@@ -200,6 +230,54 @@ namespace Server.CustomBots
             var pole = FindOrCreateFishingPole(bot);
             if (Fishing.System.BeginHarvesting(bot, pole) && bot.Target != null)
                 bot.Target.Invoke(bot, water);
+        }
+
+        // A cooker buys actual caught Fish from a nearby active fisher, then
+        // keeps ServUO in charge of both carving and the DefCooking craft
+        // recipe. A missing heat source or failed recipe leaves the real
+        // input in the pack for the normal bank-return path.
+        private static void TryBuyNearbyFish(PlayerBot cooker)
+        {
+            if (cooker == null || cooker.Backpack == null || cooker.Map == null) return;
+            foreach (var fisher in PlayerBotService.FindBots())
+            {
+                if (fisher == null || fisher == cooker || fisher.Deleted || !fisher.Alive || fisher.Map != cooker.Map
+                    || fisher.LaborKind != PlayerBotLaborKind.Fisher || !IsActive(fisher) || !fisher.InRange(cooker, 4)
+                    || fisher.Backpack == null) continue;
+
+                var fish = fisher.Backpack.FindItemByType<Fish>();
+                var purse = cooker.Backpack.FindItemByType<Gold>();
+                if (fish == null || fish.Deleted || fish.Amount <= 0 || purse == null || purse.Deleted || purse.Amount < fish.Amount
+                    || !cooker.Backpack.CheckHold(cooker, fish, false, true)) continue;
+
+                var price = fish.Amount;
+                var payment = TakeFromPack(cooker.Backpack, purse, price);
+                if (payment == null) return;
+                fisher.Backpack.DropItem(payment);
+                fisher.Backpack.RemoveItem(fish);
+                cooker.Backpack.DropItem(fish);
+                cooker.Say("I'll cook that catch.");
+                fisher.Say("A fair price.");
+                PlayerBotService.RecordEvent(cooker.Name + " bought " + price + " fish from " + fisher.Name + ".");
+                return;
+            }
+        }
+
+        private static void TryCarveFish(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null) return;
+            var fish = bot.Backpack.FindItemByType<Fish>();
+            if (fish != null && !fish.Deleted) fish.Carve(bot, FindOrCreateButcherKnife(bot));
+        }
+
+        private static void TryCookFish(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null) return;
+            var raw = bot.Backpack.FindItemByType<RawFishSteak>();
+            if (raw == null || raw.Deleted) return;
+            var system = DefCooking.CraftSystem;
+            var item = system.CraftItems.SearchFor(typeof(FishSteak));
+            if (item != null) item.Craft(bot, system, typeof(RawFishSteak), FindOrCreateSkillet(bot));
         }
 
         private static void TryCraftDagger(PlayerBot bot)
@@ -401,6 +479,7 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || bot.Backpack.FindItemByType<Dagger>() != null;
                 case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
                 case PlayerBotLaborKind.Fisher: return bot.Backpack.FindItemByType<Fish>() != null;
+                case PlayerBotLaborKind.Cooker: return bot.Backpack.FindItemByType<Fish>() != null || bot.Backpack.FindItemByType<RawFishSteak>() != null || bot.Backpack.FindItemByType<FishSteak>() != null;
                 default: return false;
             }
         }
@@ -415,7 +494,8 @@ namespace Server.CustomBots
                     || (bot.LaborKind == PlayerBotLaborKind.Lumberjack && item is BaseLog)
                     || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || item is Dagger))
                     || (bot.LaborKind == PlayerBotLaborKind.Carpenter && (item is BaseWoodBoard || item is WoodenShield))
-                    || (bot.LaborKind == PlayerBotLaborKind.Fisher && item is Fish))
+                    || (bot.LaborKind == PlayerBotLaborKind.Fisher && item is Fish)
+                    || (bot.LaborKind == PlayerBotLaborKind.Cooker && (item is Fish || item is RawFishSteak || item is FishSteak)))
                     goods.Add(item);
             }
             foreach (var item in goods)
