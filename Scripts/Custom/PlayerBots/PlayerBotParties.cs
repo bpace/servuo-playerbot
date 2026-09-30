@@ -12,7 +12,9 @@ namespace Server.CustomBots
     {
         private static readonly Dictionary<int, DateTime> ManagedLeaders = new Dictionary<int, DateTime>();
         private static readonly HashSet<int> PlayerLedLeaders = new HashSet<int>();
+        private static readonly Dictionary<int, DateTime> PlayerLedSeparationSince = new Dictionary<int, DateTime>();
         private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
+        private static readonly TimeSpan PlayerLedSeparationLimit = TimeSpan.FromMinutes(2);
         private static DateTime NextAutonomousReconcile = DateTime.MinValue;
         private static readonly TimeSpan AutonomousReconcileInterval = TimeSpan.FromSeconds(45);
 
@@ -200,10 +202,21 @@ namespace Server.CustomBots
             // prevents a headless follower from remaining tied to a corpse.
             if (!leader.Alive)
             {
+                PlayerLedSeparationSince.Remove(bot.Serial.Value);
                 party.Remove(bot);
                 if (party.Members.Count <= 1) PlayerLedLeaders.Remove(leader.Serial.Value);
                 return;
             }
+            // A headless bot has no client-side moongate or recall action to
+            // follow a player across facets. Keep the native party intact for
+            // a short grace period, then leave rather than pinning the bot to
+            // an unreachable leader forever.
+            if (bot.Map != leader.Map)
+            {
+                LeavePlayerPartyAfterSeparation(bot, party, leader);
+                return;
+            }
+            PlayerLedSeparationSince.Remove(bot.Serial.Value);
             var target = leader.Combatant as Mobile;
             if (target != null && !target.Deleted && target.Alive && target.Map == bot.Map
                 && bot.InRange(target, 12) && bot.CanBeHarmful(target, false))
@@ -218,6 +231,28 @@ namespace Server.CustomBots
                 return;
             }
             FollowLeader(bot, leader);
+        }
+
+        private static void LeavePlayerPartyAfterSeparation(PlayerBot bot, Party party, Mobile leader)
+        {
+            var now = DateTime.UtcNow;
+            DateTime since;
+            if (!PlayerLedSeparationSince.TryGetValue(bot.Serial.Value, out since))
+            {
+                PlayerLedSeparationSince[bot.Serial.Value] = now;
+                bot.NextAction = now + TimeSpan.FromSeconds(5);
+                return;
+            }
+            if (now - since < PlayerLedSeparationLimit)
+            {
+                bot.NextAction = now + TimeSpan.FromSeconds(5);
+                return;
+            }
+
+            PlayerLedSeparationSince.Remove(bot.Serial.Value);
+            party.Remove(bot);
+            if (party.Members.Count <= 1) PlayerLedLeaders.Remove(leader.Serial.Value);
+            bot.NextAction = now + TimeSpan.FromSeconds(2);
         }
 
         private static void FollowLeader(PlayerBot bot, Mobile leader)
@@ -311,6 +346,13 @@ namespace Server.CustomBots
             var now = DateTime.UtcNow;
             if (!Core.UOR || now < NextAutonomousReconcile) return;
             NextAutonomousReconcile = now + AutonomousReconcileInterval;
+
+            foreach (var serial in new List<int>(PlayerLedSeparationSince.Keys))
+            {
+                var bot = World.FindMobile((Serial)serial) as PlayerBot;
+                if (bot == null || bot.Deleted || Party.Get(bot) == null)
+                    PlayerLedSeparationSince.Remove(serial);
+            }
 
             foreach (var bot in PlayerBotService.FindBots())
             {
