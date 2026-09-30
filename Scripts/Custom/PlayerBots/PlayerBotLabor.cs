@@ -61,6 +61,7 @@ namespace Server.CustomBots
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(9, 15));
                     break;
                 case PlayerBotLaborKind.Blacksmith:
+                    TryBuyNearbyOre(bot);
                     TrySmeltOre(bot);
                     TryCraftDagger(bot);
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
@@ -148,6 +149,51 @@ namespace Server.CustomBots
 
             ore.OnDoubleClick(bot);
             if (bot.Target != null) bot.Target.Invoke(bot, forge);
+        }
+
+        // A short local labor contract is the first economy seam: a smith
+        // pays a nearby active miner for ore the miner actually harvested.
+        // Stack splitting uses ServUO's own lift helper, so the transaction
+        // conserves both ore and gold instead of manufacturing either.
+        private static void TryBuyNearbyOre(PlayerBot smith)
+        {
+            if (smith == null || smith.Backpack == null || smith.Map == null) return;
+            foreach (var miner in PlayerBotService.FindBots())
+            {
+                if (miner == null || miner == smith || miner.Deleted || !miner.Alive || miner.Map != smith.Map
+                    || miner.LaborKind != PlayerBotLaborKind.Miner || !IsActive(miner) || !miner.InRange(smith, 4)
+                    || miner.Backpack == null) continue;
+
+                var ore = miner.Backpack.FindItemByType<BaseOre>();
+                var purse = smith.Backpack.FindItemByType<Gold>();
+                if (ore == null || ore.Deleted || ore.Amount <= 0 || purse == null || purse.Deleted || purse.Amount < ore.Amount
+                    || !smith.Backpack.CheckHold(smith, ore, false, true)) continue;
+
+                var price = ore.Amount;
+                var payment = TakeFromPack(smith.Backpack, purse, price);
+                if (payment == null) return;
+                miner.Backpack.DropItem(payment);
+
+                miner.Backpack.RemoveItem(ore);
+                smith.Backpack.DropItem(ore);
+                smith.Say("I'll take that ore.");
+                miner.Say("A fair price.");
+                PlayerBotService.RecordEvent(smith.Name + " bought " + price + " ore from " + miner.Name + ".");
+                return;
+            }
+        }
+
+        private static Item TakeFromPack(Container pack, Item item, int amount)
+        {
+            if (pack == null || item == null || item.Deleted || amount <= 0 || amount > item.Amount) return null;
+            if (amount == item.Amount)
+            {
+                pack.RemoveItem(item);
+                return item;
+            }
+            var moved = Mobile.LiftItemDupe(item, amount);
+            if (moved != null) pack.RemoveItem(moved);
+            return moved;
         }
 
         private static Item FindForge(PlayerBot bot)
