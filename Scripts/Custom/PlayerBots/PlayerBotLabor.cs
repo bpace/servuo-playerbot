@@ -4,6 +4,7 @@ using Server.Engines.Craft;
 using Server.Engines.Harvest;
 using Server.Items;
 using Server.Mobiles;
+using Server.Targeting;
 
 namespace Server.CustomBots
 {
@@ -23,7 +24,7 @@ namespace Server.CustomBots
         {
             if (gm == null || gm.Map == null || gm.Map == Map.Internal) return "Stand in the world before starting a labor bot.";
             PlayerBotLaborKind kind;
-            if (!TryParse(requestedKind, out kind)) return "Usage: [PlayerBots labor miner|lumberjack|blacksmith|carpenter]";
+            if (!TryParse(requestedKind, out kind)) return "Usage: [PlayerBots labor miner|lumberjack|blacksmith|carpenter|fisher]";
 
             var bot = new PlayerBot(PlayerBotRole.Adventurer);
             bot.MoveToWorld(gm.Location, gm.Map);
@@ -79,6 +80,10 @@ namespace Server.CustomBots
                     TryCraftWoodenShield(bot);
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
                     break;
+                case PlayerBotLaborKind.Fisher:
+                    TryFish(bot);
+                    bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(10, 16));
+                    break;
             }
         }
 
@@ -89,6 +94,7 @@ namespace Server.CustomBots
             else if (String.Equals(requestedKind, "lumberjack", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Lumberjack;
             else if (String.Equals(requestedKind, "blacksmith", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Blacksmith;
             else if (String.Equals(requestedKind, "carpenter", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Carpenter;
+            else if (String.Equals(requestedKind, "fisher", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Fisher;
             return kind != PlayerBotLaborKind.None;
         }
 
@@ -113,6 +119,10 @@ namespace Server.CustomBots
                     bot.Skills[SkillName.Lumberjacking].Base = Math.Max(bot.Skills[SkillName.Lumberjacking].Base, 75.0);
                     FindOrCreateSaw(bot);
                     FindOrCreateHatchet(bot);
+                    break;
+                case PlayerBotLaborKind.Fisher:
+                    bot.Skills[SkillName.Fishing].Base = Math.Max(bot.Skills[SkillName.Fishing].Base, 75.0);
+                    FindOrCreateFishingPole(bot);
                     break;
             }
         }
@@ -156,6 +166,40 @@ namespace Server.CustomBots
             tool = new Saw();
             bot.AddToBackpack(tool);
             return tool;
+        }
+
+        private static FishingPole FindOrCreateFishingPole(PlayerBot bot)
+        {
+            var tool = bot.Backpack == null ? null : bot.Backpack.FindItemByType<FishingPole>();
+            if (tool != null && !tool.Deleted) return tool;
+            tool = new FishingPole();
+            bot.AddToBackpack(tool);
+            return tool;
+        }
+
+        // Fishing.System owns range, water-tile validation, resource banks,
+        // skill checks, catch selection, pack delivery, and pole wear. The
+        // labor adapter only selects a nearby land-water tile and invokes the
+        // normal targeting path a player uses after double-clicking a pole.
+        private static void TryFish(PlayerBot bot)
+        {
+            if (bot == null || bot.Map == null || bot.Map == Map.Internal) return;
+            LandTarget water = null;
+            for (var radius = 1; radius <= 4 && water == null; radius++)
+            {
+                for (var x = bot.X - radius; x <= bot.X + radius && water == null; x++)
+                for (var y = bot.Y - radius; y <= bot.Y + radius; y++)
+                {
+                    if (x < 0 || y < 0 || Math.Max(Math.Abs(x - bot.X), Math.Abs(y - bot.Y)) != radius) continue;
+                    var tile = bot.Map.Tiles.GetLandTile(x, y).ID & TileData.MaxLandValue;
+                    if (Fishing.System.Definition.Validate(tile)) water = new LandTarget(new Point3D(x, y, 0), bot.Map);
+                }
+            }
+            if (water == null) return;
+
+            var pole = FindOrCreateFishingPole(bot);
+            if (Fishing.System.BeginHarvesting(bot, pole) && bot.Target != null)
+                bot.Target.Invoke(bot, water);
         }
 
         private static void TryCraftDagger(PlayerBot bot)
@@ -356,6 +400,7 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null;
                 case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || bot.Backpack.FindItemByType<Dagger>() != null;
                 case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
+                case PlayerBotLaborKind.Fisher: return bot.Backpack.FindItemByType<Fish>() != null;
                 default: return false;
             }
         }
@@ -369,7 +414,8 @@ namespace Server.CustomBots
                 if ((bot.LaborKind == PlayerBotLaborKind.Miner && item is BaseOre)
                     || (bot.LaborKind == PlayerBotLaborKind.Lumberjack && item is BaseLog)
                     || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || item is Dagger))
-                    || (bot.LaborKind == PlayerBotLaborKind.Carpenter && (item is BaseWoodBoard || item is WoodenShield)))
+                    || (bot.LaborKind == PlayerBotLaborKind.Carpenter && (item is BaseWoodBoard || item is WoodenShield))
+                    || (bot.LaborKind == PlayerBotLaborKind.Fisher && item is Fish))
                     goods.Add(item);
             }
             foreach (var item in goods)
