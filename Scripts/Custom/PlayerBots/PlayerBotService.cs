@@ -1146,6 +1146,32 @@ namespace Server.CustomBots
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 6));
         }
 
+        // Tavern parties may become expeditions only through the same audited
+        // native-dungeon trip used by the GM test command. Every member must
+        // be eligible before any state is changed, and each bot still walks
+        // to and activates the verified physical pads independently.
+        internal static bool TryAssignNativePartyDungeonTrip(IList<PlayerBot> members)
+        {
+            if (members == null || members.Count < 2) return false;
+            var map = members[0] == null ? null : members[0].Map;
+            if (map == null || map == Map.Internal) return false;
+            foreach (var bot in members)
+            {
+                if (bot == null || bot.Deleted || !bot.Alive || bot.Map != map
+                    || bot.BotRole == PlayerBotRole.PlayerKiller || !String.IsNullOrEmpty(bot.DungeonTravelState))
+                    return false;
+            }
+
+            PlayerBotWorldData.NativeDungeonTrip trip;
+            if (!PlayerBotWorldData.TryGetAnyNativeDungeonTrip(map, out trip)) return false;
+            foreach (var bot in members)
+            {
+                AssignNativeDungeonTrip(bot, trip);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
+            }
+            return true;
+        }
+
         private static bool TryTickBankStreetFollow(PlayerBot bot, DateTime now)
         {
             if (!String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase)

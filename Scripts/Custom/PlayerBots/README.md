@@ -34,6 +34,8 @@ On UOR-or-later shards, `[PlayerBots party [2-10]` forms a normal ServUO `Party`
 
 Idle Travelers and Adventurers who separately arrive at the same tavern may also form a two-to-four bot native party. This is a local LFG muster, never a teleport or player recruitment: every member must be at that tavern, unpartied, out of combat, and free of labor or corpse recovery. Their visit session ends before the party starts, so normal party movement takes them back onto regular routes.
 
+One in four tavern groups becomes a dungeon expedition only when that facet already has a live-audited native dungeon trip. Every member walks to and uses the verified physical pads through the existing dungeon state machine; if no audited trip exists, the group stays on ordinary routes.
+
 Autonomous parties use exact guild affiliation matching. Fellowship crews do not absorb unguilded bots, and unguilded groups do not absorb Fellowship members.
 
 A player can instead lead a party by standing beside an eligible bot and using `[LeadBotParty`. Each use recruits one nearby bot through ServUO's native Party object. Player-led bots follow the player on the same facet and assist a valid combat target; they never teleport across a map or recruit players automatically.
