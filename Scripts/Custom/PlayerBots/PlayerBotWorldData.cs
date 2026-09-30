@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
+using Server.Engines.Harvest;
 using Server.Items;
 using Server.Regions;
 using CalcMoves = Server.Movement.Movement;
@@ -200,6 +201,7 @@ namespace Server.CustomBots
                 message = "Point is outside " + map.Name + ".";
                 return false;
             }
+            if (!waypoint && !ValidateGatherSite(map, kind, x, y, z, out message)) return false;
             lock (Sync)
             {
                 if (waypoint)
@@ -226,6 +228,56 @@ namespace Server.CustomBots
             }
             message = (waypoint ? "Waypoint" : "Destination") + " saved and reloaded.";
             return true;
+        }
+
+        // Gathering sites are authored stand points, not synthetic resource
+        // nodes. Verify a worker can stand here and that ServUO's live harvest
+        // definitions recognize a matching target in their ordinary range.
+        // Other destination kinds retain their existing generic authoring
+        // contract, while a bad resource site cannot later create a worker
+        // that repeatedly swings at terrain the shard rejects.
+        private static bool ValidateGatherSite(Map map, string kind, int x, int y, int z, out string message)
+        {
+            message = null;
+            HarvestDefinition definition = null;
+            var radius = 0;
+            if (String.Equals(kind, "MiningSpot", StringComparison.OrdinalIgnoreCase))
+            {
+                definition = Mining.System.OreAndStone;
+                radius = definition.MaxRange;
+            }
+            else if (String.Equals(kind, "LumberSpot", StringComparison.OrdinalIgnoreCase))
+            {
+                definition = Lumberjacking.System.Definition;
+                radius = definition.MaxRange;
+            }
+            else if (String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase))
+            {
+                definition = Fishing.System.Definition;
+                radius = definition.MaxRange;
+            }
+            else return true;
+
+            if (!IsWalkable(map, x, y, z))
+            {
+                message = "A gather-site worker cannot stand at that point.";
+                return false;
+            }
+            for (var targetX = x - radius; targetX <= x + radius; targetX++)
+            for (var targetY = y - radius; targetY <= y + radius; targetY++)
+            {
+                if (targetX < 0 || targetY < 0 || targetX >= map.Width || targetY >= map.Height
+                    || Math.Max(Math.Abs(targetX - x), Math.Abs(targetY - y)) > radius) continue;
+
+                var statics = map.Tiles.GetStaticTiles(targetX, targetY, false);
+                foreach (var tile in statics)
+                    if (definition.Validate((tile.ID & 0x3FFF) | 0x4000)) return true;
+
+                if (definition.Validate(map.Tiles.GetLandTile(targetX, targetY).ID)) return true;
+            }
+
+            message = "No matching native harvest target is within range of that gather site.";
+            return false;
         }
 
         public static PlayerBotDestination RandomDestination(Map map)
