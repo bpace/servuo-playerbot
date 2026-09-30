@@ -10,6 +10,7 @@ namespace Server.CustomBots
     public static class PlayerBotParties
     {
         private static readonly Dictionary<int, DateTime> ManagedLeaders = new Dictionary<int, DateTime>();
+        private static readonly HashSet<int> PlayerLedLeaders = new HashSet<int>();
         private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
         private static DateTime NextAutonomousReconcile = DateTime.MinValue;
         private static readonly TimeSpan AutonomousReconcileInterval = TimeSpan.FromSeconds(45);
@@ -57,7 +58,8 @@ namespace Server.CustomBots
             if (!Core.UOR || bot == null || bot.Deleted) return false;
             var party = Party.Get(bot);
             if (party == null || party.Leader == null) return false;
-            return ManagedLeaders.ContainsKey(party.Leader.Serial.Value);
+            return ManagedLeaders.ContainsKey(party.Leader.Serial.Value)
+                || PlayerLedLeaders.Contains(party.Leader.Serial.Value);
         }
 
         // Player membership is never automatic: the player runs this command
@@ -92,15 +94,57 @@ namespace Server.CustomBots
             return "Invitation sent from " + closest.Leader.Name + ". Type /accept to join for the remaining party run.";
         }
 
+        // The player explicitly asks to lead. The engine still owns the
+        // normal Party object; the forced accept is only for a headless bot
+        // that cannot click ServUO's client invitation gump.
+        public static string AddBotToPlayerParty(Mobile player)
+        {
+            if (!Core.UOR)
+                return "Native parties require a UOR-or-later expansion. This shard is configured earlier than UOR.";
+            if (player == null || player.Deleted || !player.Alive || player.Map == null || player.Map == Map.Internal)
+                return "You must be alive on a normal game facet to lead a PlayerBot party.";
+
+            var party = Party.Get(player);
+            if (party != null && party.Leader != player)
+                return "Only a party leader can recruit a PlayerBot.";
+            if (party != null && party.Members.Count + party.Candidates.Count >= Party.Capacity)
+                return "Your party is full.";
+
+            PlayerBot closest = null;
+            var closestDistance = Double.MaxValue;
+            foreach (var bot in PlayerBotService.FindBots())
+            {
+                if (!PlayerBotService.IsEligibleForAutonomousParty(bot) || Party.Get(bot) != null || bot.Map != player.Map
+                    || !bot.InRange(player, 18)) continue;
+                var distance = bot.GetDistanceToSqrt(player);
+                if (distance >= closestDistance) continue;
+                closest = bot;
+                closestDistance = distance;
+            }
+            if (closest == null)
+                return "No eligible unpartied PlayerBot is within 18 tiles.";
+
+            Party.Invite(player, closest);
+            party = Party.Get(player);
+            if (party == null) return "ServUO could not create the native party.";
+            party.OnAccept(closest, true);
+            PlayerLedLeaders.Add(player.Serial.Value);
+            return closest.Name + " joined your native party and will follow your lead.";
+        }
+
         public static void Tick(PlayerBot bot)
         {
             var party = Party.Get(bot);
             if (party == null || party.Leader == null) return;
+            var leader = party.Leader as PlayerBot;
+            if (leader == null)
+            {
+                TickPlayerLedParty(bot, party, party.Leader);
+                return;
+            }
             DateTime expires;
             if (!ManagedLeaders.TryGetValue(party.Leader.Serial.Value, out expires)) return;
-
-            var leader = party.Leader as PlayerBot;
-            if (leader == null || leader.Deleted || expires <= DateTime.UtcNow)
+            if (leader.Deleted || expires <= DateTime.UtcNow)
             {
                 ManagedLeaders.Remove(party.Leader.Serial.Value);
                 party.Disband();
@@ -141,6 +185,30 @@ namespace Server.CustomBots
             {
                 if (bot.Map == leader.Map)
                     bot.Move(bot.GetDirectionTo(leader.Location) | Direction.Running);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+                return;
+            }
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
+        }
+
+        private static void TickPlayerLedParty(PlayerBot bot, Party party, Mobile leader)
+        {
+            if (leader == null || leader.Deleted || !PlayerLedLeaders.Contains(leader.Serial.Value)) return;
+            var target = leader.Combatant as Mobile;
+            if (target != null && !target.Deleted && target.Alive && target.Map == bot.Map
+                && bot.InRange(target, 12) && bot.CanBeHarmful(target, false))
+            {
+                bot.Combatant = target;
+                bot.Warmode = true;
+            }
+            if (PlayerBotService.ShouldFightBehavior(bot))
+            {
+                PlayerBotService.TickCombatBehavior(bot);
+                return;
+            }
+            if (bot.Map == leader.Map && !bot.InRange(leader.Location, 2))
+            {
+                bot.Move(bot.GetDirectionTo(leader.Location) | Direction.Running);
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
                 return;
             }

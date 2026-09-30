@@ -87,6 +87,7 @@ namespace Server.CustomBots
         {
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
             CommandSystem.Register("JoinBotParty", AccessLevel.Player, OnJoinBotPartyCommand);
+            CommandSystem.Register("LeadBotParty", AccessLevel.Player, OnLeadBotPartyCommand);
             CommandSystem.Register("JoinBotGuild", AccessLevel.Player, OnJoinBotGuildCommand);
             EventSink.WorldLoad += OnWorldLoad;
             PlayerBotWorldData.Initialize();
@@ -257,6 +258,12 @@ namespace Server.CustomBots
         private static void OnJoinBotPartyCommand(CommandEventArgs e)
         {
             var message = PlayerBotParties.InvitePlayer(e.Mobile);
+            e.Mobile.SendMessage(message);
+        }
+
+        private static void OnLeadBotPartyCommand(CommandEventArgs e)
+        {
+            var message = PlayerBotParties.AddBotToPlayerParty(e.Mobile);
             e.Mobile.SendMessage(message);
         }
 
