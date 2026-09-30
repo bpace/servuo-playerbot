@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Server.Engines.PartySystem;
+using Server.Items;
 
 namespace Server.CustomBots
 {
@@ -169,6 +170,7 @@ namespace Server.CustomBots
                 bot.Combatant = leaderTarget;
                 bot.Warmode = true;
             }
+            if (TryHealPartyMember(bot, party)) return;
             if (PlayerBotService.ShouldFightBehavior(bot))
             {
                 PlayerBotService.TickCombatBehavior(bot);
@@ -201,6 +203,7 @@ namespace Server.CustomBots
                 bot.Combatant = target;
                 bot.Warmode = true;
             }
+            if (TryHealPartyMember(bot, party)) return;
             if (PlayerBotService.ShouldFightBehavior(bot))
             {
                 PlayerBotService.TickCombatBehavior(bot);
@@ -213,6 +216,35 @@ namespace Server.CustomBots
                 return;
             }
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
+        }
+
+        // A party medic only consumes a real Bandage already in its pack.
+        // Healing resolution, timing, skill checks, and the actual hit change
+        // stay entirely inside ServUO's native BandageContext.
+        private static bool TryHealPartyMember(PlayerBot bot, Party party)
+        {
+            if (bot == null || party == null || bot.Backpack == null || BandageContext.GetContext(bot) != null) return false;
+            var bandage = bot.Backpack.FindItemByType<Bandage>();
+            if (bandage == null || bandage.Deleted) return false;
+
+            Mobile patient = null;
+            var lowestRatio = 1.0;
+            foreach (var member in party.Members)
+            {
+                var candidate = member.Mobile;
+                if (candidate == null || candidate.Deleted || !candidate.Alive || candidate.Map != bot.Map
+                    || !bot.InRange(candidate, Bandage.Range) || candidate.Hits >= candidate.HitsMax) continue;
+                var ratio = candidate.HitsMax <= 0 ? 1.0 : (double)candidate.Hits / candidate.HitsMax;
+                if (ratio >= lowestRatio || !bot.CanBeBeneficial(candidate, true, true)) continue;
+                patient = candidate;
+                lowestRatio = ratio;
+            }
+            if (patient == null) return false;
+            if (BandageContext.BeginHeal(bot, patient) == null) return false;
+            NegativeAttributes.OnCombatAction(bot);
+            bandage.Consume();
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+            return true;
         }
 
         // Groups begin only when compatible idle travelers are already close
