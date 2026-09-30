@@ -151,6 +151,11 @@ namespace Server.CustomBots
                 party.Disband();
                 return;
             }
+            if (!leader.Alive)
+            {
+                PromoteLivingBotLeader(party, leader, expires);
+                return;
+            }
 
             // Dungeon parties share a destination, not a fabricated map move.
             // Each member still takes its own validated route and activates its
@@ -349,6 +354,33 @@ namespace Server.CustomBots
             for (var i = 1; i < members.Count; i++) party.Add(members[i]);
             ManagedLeaders[leader.Serial.Value] = DateTime.UtcNow + Lifetime;
             PlayerBotService.RecordPartyEvent(leader.Name + " formed an " + kind + " party with " + members.Count + " bots.");
+        }
+
+        // ServUO's native Party leader is immutable. For a bot-only managed
+        // party, a dead leader therefore gets a clean native disband/reform
+        // around the surviving bots instead of leaving followers attached to
+        // a corpse. Player-led parties are intentionally excluded: a player
+        // chooses whether to rebuild their own party after a death.
+        private static void PromoteLivingBotLeader(Party party, PlayerBot formerLeader, DateTime expires)
+        {
+            if (party == null || formerLeader == null) return;
+            var survivors = new List<PlayerBot>();
+            foreach (var member in party.Members)
+            {
+                var bot = member.Mobile as PlayerBot;
+                if (bot != null && !bot.Deleted && bot.Alive) survivors.Add(bot);
+            }
+
+            ManagedLeaders.Remove(formerLeader.Serial.Value);
+            party.Disband();
+            if (survivors.Count < 2) return;
+
+            var successor = survivors[0];
+            var rebuilt = new Party(successor);
+            successor.Party = rebuilt;
+            for (var i = 1; i < survivors.Count; i++) rebuilt.Add(survivors[i]);
+            ManagedLeaders[successor.Serial.Value] = expires;
+            PlayerBotService.RecordPartyEvent(successor.Name + " took over a native PlayerBot party after " + formerLeader.Name + " fell.");
         }
     }
 }
