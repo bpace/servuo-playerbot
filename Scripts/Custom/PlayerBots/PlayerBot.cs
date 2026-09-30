@@ -131,6 +131,11 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public string LaborReturnName { get; set; }
 
+        // A single persisted companion edge is deliberately small but gives
+        // repeat tavern meetings a social memory across ordinary world saves.
+        [CommandProperty(AccessLevel.GameMaster)]
+        public int PreferredCompanionSerial { get; set; }
+
         [CommandProperty(AccessLevel.GameMaster)]
         public int CorpseRecoverySerial { get; set; }
 
@@ -233,6 +238,7 @@ namespace Server.CustomBots
             NextLaborAction = DateTime.MinValue;
             LaborReturning = false;
             LaborReturnName = "";
+            PreferredCompanionSerial = 0;
             CorpseRecoverySerial = 0;
             CorpseRecoveryUntil = DateTime.MinValue;
             SpawnSource = "";
@@ -277,7 +283,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(13);
+            writer.Write(14);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -317,6 +323,7 @@ namespace Server.CustomBots
             writer.Write(CorpseRecoveryUntil);
             writer.Write(LaborReturning);
             writer.Write(LaborReturnName);
+            writer.Write(PreferredCompanionSerial);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -366,6 +373,7 @@ namespace Server.CustomBots
             CorpseRecoveryUntil = version >= 12 ? reader.ReadDateTime() : DateTime.MinValue;
             LaborReturning = version >= 13 && reader.ReadBool();
             LaborReturnName = version >= 13 ? reader.ReadString() ?? "" : "";
+            PreferredCompanionSerial = version >= 14 ? reader.ReadInt() : 0;
             Player = false;
         }
     }
