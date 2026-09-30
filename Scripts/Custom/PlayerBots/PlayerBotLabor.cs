@@ -22,7 +22,7 @@ namespace Server.CustomBots
         {
             if (gm == null || gm.Map == null || gm.Map == Map.Internal) return "Stand in the world before starting a labor bot.";
             PlayerBotLaborKind kind;
-            if (!TryParse(requestedKind, out kind)) return "Usage: [PlayerBots labor miner|lumberjack|blacksmith]";
+            if (!TryParse(requestedKind, out kind)) return "Usage: [PlayerBots labor miner|lumberjack|blacksmith|carpenter]";
 
             var bot = new PlayerBot(PlayerBotRole.Adventurer);
             bot.MoveToWorld(gm.Location, gm.Map);
@@ -66,6 +66,12 @@ namespace Server.CustomBots
                     TryCraftDagger(bot);
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
                     break;
+                case PlayerBotLaborKind.Carpenter:
+                    TryBuyNearbyLogs(bot);
+                    TryMakeBoards(bot);
+                    TryCraftWoodenShield(bot);
+                    bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
+                    break;
             }
         }
 
@@ -75,6 +81,7 @@ namespace Server.CustomBots
             if (String.Equals(requestedKind, "miner", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Miner;
             else if (String.Equals(requestedKind, "lumberjack", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Lumberjack;
             else if (String.Equals(requestedKind, "blacksmith", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Blacksmith;
+            else if (String.Equals(requestedKind, "carpenter", StringComparison.OrdinalIgnoreCase)) kind = PlayerBotLaborKind.Carpenter;
             return kind != PlayerBotLaborKind.None;
         }
 
@@ -93,6 +100,12 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Blacksmith:
                     bot.Skills[SkillName.Blacksmith].Base = Math.Max(bot.Skills[SkillName.Blacksmith].Base, 75.0);
                     FindOrCreateTongs(bot);
+                    break;
+                case PlayerBotLaborKind.Carpenter:
+                    bot.Skills[SkillName.Carpentry].Base = Math.Max(bot.Skills[SkillName.Carpentry].Base, 75.0);
+                    bot.Skills[SkillName.Lumberjacking].Base = Math.Max(bot.Skills[SkillName.Lumberjacking].Base, 75.0);
+                    FindOrCreateSaw(bot);
+                    FindOrCreateHatchet(bot);
                     break;
             }
         }
@@ -129,12 +142,67 @@ namespace Server.CustomBots
             return tool;
         }
 
+        private static Saw FindOrCreateSaw(PlayerBot bot)
+        {
+            var tool = bot.Backpack == null ? null : bot.Backpack.FindItemByType<Saw>();
+            if (tool != null && !tool.Deleted) return tool;
+            tool = new Saw();
+            bot.AddToBackpack(tool);
+            return tool;
+        }
+
         private static void TryCraftDagger(PlayerBot bot)
         {
             var tool = FindOrCreateTongs(bot);
             var system = DefBlacksmithy.CraftSystem;
             var item = system.CraftItems.SearchFor(typeof(Dagger));
             if (item != null) item.Craft(bot, system, typeof(IronIngot), tool);
+        }
+
+        private static void TryCraftWoodenShield(PlayerBot bot)
+        {
+            var tool = FindOrCreateSaw(bot);
+            var system = DefCarpentry.CraftSystem;
+            var item = system.CraftItems.SearchFor(typeof(WoodenShield));
+            if (item != null) item.Craft(bot, system, typeof(Board), tool);
+        }
+
+        // Lumberjacks sell their actual logs to a nearby carpenter. The
+        // carpenter uses BaseLog.Axe, ServUO's normal log-to-board path,
+        // before the ordinary carpentry CraftItem pipeline consumes boards.
+        private static void TryBuyNearbyLogs(PlayerBot carpenter)
+        {
+            if (carpenter == null || carpenter.Backpack == null || carpenter.Map == null) return;
+            foreach (var lumberjack in PlayerBotService.FindBots())
+            {
+                if (lumberjack == null || lumberjack == carpenter || lumberjack.Deleted || !lumberjack.Alive
+                    || lumberjack.Map != carpenter.Map || lumberjack.LaborKind != PlayerBotLaborKind.Lumberjack
+                    || !IsActive(lumberjack) || !lumberjack.InRange(carpenter, 4) || lumberjack.Backpack == null) continue;
+
+                var logs = lumberjack.Backpack.FindItemByType<BaseLog>();
+                var purse = carpenter.Backpack.FindItemByType<Gold>();
+                if (logs == null || logs.Deleted || logs.Amount <= 0 || purse == null || purse.Deleted || purse.Amount < logs.Amount
+                    || !carpenter.Backpack.CheckHold(carpenter, logs, false, true)) continue;
+
+                var price = logs.Amount;
+                var payment = TakeFromPack(carpenter.Backpack, purse, price);
+                if (payment == null) return;
+                lumberjack.Backpack.DropItem(payment);
+
+                lumberjack.Backpack.RemoveItem(logs);
+                carpenter.Backpack.DropItem(logs);
+                carpenter.Say("I'll take those logs.");
+                lumberjack.Say("A fair price.");
+                PlayerBotService.RecordEvent(carpenter.Name + " bought " + price + " logs from " + lumberjack.Name + ".");
+                return;
+            }
+        }
+
+        private static void TryMakeBoards(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null) return;
+            var logs = bot.Backpack.FindItemByType<BaseLog>();
+            if (logs != null && !logs.Deleted) logs.Axe(bot, FindOrCreateHatchet(bot));
         }
 
         // Smelting must remain the native BaseOre interaction. It keeps the
