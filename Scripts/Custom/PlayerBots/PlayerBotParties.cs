@@ -415,6 +415,8 @@ namespace Server.CustomBots
                 if (recruits.Count < 2) continue;
                 foreach (var member in recruits) PlayerBotService.ResumeTravelAfterPartyMuster(member);
                 Form(recruits, "tavern LFG");
+                if (Utility.RandomDouble() < 0.25 && PlayerBotService.TryAssignNativePartyDungeonTrip(recruits))
+                    PlayerBotService.RecordPartyEvent(leader.Name + " led the tavern crew on a verified dungeon expedition.");
                 return;
             }
         }
