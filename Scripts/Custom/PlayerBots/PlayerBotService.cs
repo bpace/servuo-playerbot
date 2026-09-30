@@ -1525,13 +1525,34 @@ namespace Server.CustomBots
                     bot.Animate(32, 5, 1, true, false, 0);
                     break;
                 case PlayerBotBankRole.HidingMacro:
-                    bot.Hidden = !bot.Hidden;
-                    break;
+                    if (bot.Hidden)
+                    {
+                        bot.RevealingAction();
+                        bot.NextBankAction = now + BankActionDelay(bot.BankRole);
+                    }
+                    else
+                    {
+                        bot.NextBankAction = now + Hiding.OnUse(bot);
+                    }
+                    bot.NextAction = bot.NextBankAction;
+                    return;
                 case PlayerBotBankRole.StealthMacro:
-                    bot.Hidden = true;
-                    var drift = GetBankSitterDriftPoint(bot);
-                    if (drift != Point3D.Zero) bot.Move(bot.GetDirectionTo(drift));
-                    break;
+                    if (!bot.Hidden)
+                    {
+                        bot.NextBankAction = now + Hiding.OnUse(bot);
+                    }
+                    else if (!bot.IsStealthing)
+                    {
+                        bot.NextBankAction = now + Stealth.OnUse(bot);
+                    }
+                    else
+                    {
+                        var drift = GetBankSitterDriftPoint(bot);
+                        if (drift != Point3D.Zero) bot.Move(bot.GetDirectionTo(drift));
+                        bot.NextBankAction = now + BankActionDelay(bot.BankRole);
+                    }
+                    bot.NextAction = bot.NextBankAction;
+                    return;
             }
 
             bot.NextBankAction = now + BankActionDelay(bot.BankRole);
