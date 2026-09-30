@@ -466,6 +466,7 @@ namespace Server.CustomBots
                 ReconcileBankHubs();
                 _nextBankHubReconcile = now + BankHubReconcileInterval;
             }
+            PlayerBotGuilds.ReconcileAutonomousMembership();
             PlayerBotParties.ReconcileAutonomousParties();
             foreach (var bot in FindBots()) Tick(bot);
         }
