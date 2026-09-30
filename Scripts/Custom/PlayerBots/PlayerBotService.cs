@@ -1134,6 +1134,18 @@ namespace Server.CustomBots
             bot.NextBankVisitFollow = DateTime.MinValue;
         }
 
+        // A tavern party is formed only after every member reaches the same
+        // visitor destination. Once the native Party exists, release each
+        // member from its higher-priority visitor state so Party behavior can
+        // take over without a hidden move or a stale "Visiting" destination.
+        internal static void ResumeTravelAfterPartyMuster(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted) return;
+            ClearBankVisit(bot);
+            AssignDestination(bot);
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 6));
+        }
+
         private static bool TryTickBankStreetFollow(PlayerBot bot, DateTime now)
         {
             if (!String.Equals(bot.BankVisitKind, "Bank", StringComparison.OrdinalIgnoreCase)
