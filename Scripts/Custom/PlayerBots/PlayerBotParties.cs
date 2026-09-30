@@ -161,8 +161,9 @@ namespace Server.CustomBots
                 return;
             }
 
-            // Every member still uses the existing native combat adapter;
-            // groups do not gain fabricated damage, loot, healing, or travel.
+            // Every member still uses the existing native combat adapter.
+            // Party medicine only consumes a real Bandage already in a bot's
+            // pack; the group does not fabricate damage, loot, or travel.
             var leaderTarget = leader.Combatant as Mobile;
             if (bot != leader && leaderTarget != null && !leaderTarget.Deleted && leaderTarget.Alive
                 && bot.Map == leaderTarget.Map && bot.InRange(leaderTarget, 12) && bot.CanBeHarmful(leaderTarget, false))
@@ -183,14 +184,7 @@ namespace Server.CustomBots
                 return;
             }
 
-            if (bot.Map != leader.Map || !bot.InRange(leader.Location, 2))
-            {
-                if (bot.Map == leader.Map)
-                    bot.Move(bot.GetDirectionTo(leader.Location) | Direction.Running);
-                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
-                return;
-            }
-            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
+            FollowLeader(bot, leader);
         }
 
         private static void TickPlayerLedParty(PlayerBot bot, Party party, Mobile leader)
@@ -209,13 +203,61 @@ namespace Server.CustomBots
                 PlayerBotService.TickCombatBehavior(bot);
                 return;
             }
-            if (bot.Map == leader.Map && !bot.InRange(leader.Location, 2))
+            FollowLeader(bot, leader);
+        }
+
+        private static void FollowLeader(PlayerBot bot, Mobile leader)
+        {
+            if (bot == null || leader == null || bot.Map != leader.Map)
             {
-                bot.Move(bot.GetDirectionTo(leader.Location) | Direction.Running);
-                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+                ClearFollowRoute(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
                 return;
             }
-            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
+            if (bot.InRange(leader.Location, 2))
+            {
+                ClearFollowRoute(bot);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(650, 1000));
+                return;
+            }
+
+            Point3D target;
+            if (TryGetFollowRouteTarget(bot, out target))
+            {
+                if (!bot.Move(bot.GetDirectionTo(target) | Direction.Running))
+                    ClearFollowRoute(bot);
+            }
+            else if (PlayerBotWorldData.TryPlanLocalRoute(bot, leader.Location)
+                && TryGetFollowRouteTarget(bot, out target))
+            {
+                bot.Move(bot.GetDirectionTo(target) | Direction.Running);
+            }
+            else
+            {
+                // The planner only accepts nearby paths. This preserves the
+                // original ordinary movement behavior while a distant leader
+                // closes the gap, without treating a party as a teleport.
+                bot.Move(bot.GetDirectionTo(leader.Location) | Direction.Running);
+            }
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+        }
+
+        private static bool TryGetFollowRouteTarget(PlayerBot bot, out Point3D target)
+        {
+            target = Point3D.Zero;
+            if (bot == null || bot.RoutePoints == null) return false;
+            while (bot.RouteIndex < bot.RoutePoints.Count && bot.InRange(bot.RoutePoints[bot.RouteIndex], 1))
+                bot.RouteIndex++;
+            if (bot.RouteIndex >= bot.RoutePoints.Count) return false;
+            target = bot.RoutePoints[bot.RouteIndex];
+            return true;
+        }
+
+        private static void ClearFollowRoute(PlayerBot bot)
+        {
+            if (bot == null || bot.RoutePoints == null) return;
+            bot.RoutePoints.Clear();
+            bot.RouteIndex = 0;
         }
 
         // A party medic only consumes a real Bandage already in its pack.
