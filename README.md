@@ -26,4 +26,6 @@ The mod provides headless PlayerMobile bots, city travel, chat, banking, nearby 
 
 The base mod has a behavior lifecycle seam in `PlayerBotBehaviorRegistry`. A self-contained add-on may register a `PlayerBotBehavior` from its own `Initialize` method. Higher-priority behavior runs before the built-in travel behavior, while the base mod retains the one scheduler, population control, dashboard queue, and headless-actor safety rules.
 
+Native parties are available only on UOR-or-later shards. Bots can form short-lived native parties, join a real player's party only after that player explicitly requests it, assist eligible leader targets, and use real bandages already in their own packs. Follower catch-up uses the same bounded collision-checked local planner used for verified route endpoints; it never teleports a straggler to its leader. Pre-UOR shards suppress party behavior instead of emulating party packets.
+
 Keep networked or narrative features outside the base folder. A future LLM hero/villain package can provide companions, rival thieves, and named PKs without making an API key, internet connection, or a third-party server script a requirement for ordinary PlayerBots installations. Any borrowed source must retain its license and visible attribution in both the add-on and release notes.

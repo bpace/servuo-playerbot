@@ -354,6 +354,25 @@ namespace Server.CustomBots
             }
         }
 
+        // Party followers only need to recover a nearby leader after an
+        // obstacle. Keep that recovery bounded and reuse the same checked
+        // local path builder used for graph endpoints rather than moving a
+        // straggler directly through a wall or across the map.
+        internal static bool TryPlanLocalRoute(PlayerBot bot, Point3D destination)
+        {
+            if (bot == null || bot.Map == null || bot.Map == Map.Internal)
+                return false;
+
+            var route = new List<Point3D>();
+            if (!TryAppendLocalPath(bot.Map, bot.Location, destination, route))
+                return false;
+
+            bot.RoutePoints.Clear();
+            foreach (var point in route) bot.RoutePoints.Add(point);
+            bot.RouteIndex = 0;
+            return bot.RoutePoints.Count > 0;
+        }
+
         private static PlayerBotWaypoint FindNode(Dictionary<string, PlayerBotWaypoint> nodes, string name)
         {
             PlayerBotWaypoint node;
