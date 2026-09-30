@@ -103,7 +103,7 @@ namespace Server.CustomBots
         private sealed class LaborPlayerBotBehavior : PlayerBotBehavior
         {
             public override int Priority { get { return 650; } }
-            public override bool Handles(PlayerBot bot) { return bot != null && bot.LaborKind != PlayerBotLaborKind.None; }
+            public override bool Handles(PlayerBot bot) { return bot != null && (bot.LaborKind != PlayerBotLaborKind.None || bot.LaborReturning); }
             public override void Tick(PlayerBot bot) { PlayerBotLabor.Tick(bot); }
         }
 

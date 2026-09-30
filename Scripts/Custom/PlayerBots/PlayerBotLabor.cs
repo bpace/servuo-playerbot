@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Server.Engines.Craft;
 using Server.Engines.Harvest;
 using Server.Items;
@@ -35,10 +36,16 @@ namespace Server.CustomBots
 
         public static void Tick(PlayerBot bot)
         {
+            if (bot != null && bot.LaborReturning)
+            {
+                TickReturn(bot);
+                return;
+            }
             if (!IsActive(bot))
             {
                 if (bot != null && bot.LaborKind != PlayerBotLaborKind.None)
                 {
+                    if (TryBeginReturn(bot)) return;
                     bot.LaborKind = PlayerBotLaborKind.None;
                     bot.LaborUntil = DateTime.MinValue;
                     bot.NextLaborAction = DateTime.MinValue;
@@ -262,6 +269,119 @@ namespace Server.CustomBots
             var moved = Mobile.LiftItemDupe(item, amount);
             if (moved != null) pack.RemoveItem(moved);
             return moved;
+        }
+
+        // A shift only returns goods when the already-audited route graph can
+        // reach an imported bank destination. Arrival also requires a live
+        // Banker, so a location label can never silently become a delivery.
+        private static bool TryBeginReturn(PlayerBot bot)
+        {
+            if (!HasLaborGoods(bot) || bot.Map == null || bot.Map == Map.Internal) return false;
+            var banks = PlayerBotWorldData.GetDestinations(bot.Map, "Bank");
+            banks.Sort(delegate(PlayerBotDestination left, PlayerBotDestination right)
+            {
+                var leftDistance = Math.Max(Math.Abs(bot.X - left.X), Math.Abs(bot.Y - left.Y));
+                var rightDistance = Math.Max(Math.Abs(bot.X - right.X), Math.Abs(bot.Y - right.Y));
+                return leftDistance.CompareTo(rightDistance);
+            });
+            foreach (var bank in banks)
+            {
+                if (!PlayerBotWorldData.TryPlanRoute(bot, bank)) continue;
+                bot.Destination = new Point3D(bank.X, bank.Y, bank.Z);
+                bot.DestinationName = "Labor delivery: " + bank.Name;
+                bot.LaborReturnName = bank.Name;
+                bot.LaborReturning = true;
+                PlayerBotService.RecordEvent(bot.Name + " is hauling labor goods to " + bank.Name + ".");
+                return true;
+            }
+            return false;
+        }
+
+        private static void TickReturn(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || !bot.Alive || bot.Map == null || bot.Map == Map.Internal)
+            {
+                ClearLabor(bot);
+                return;
+            }
+            if (!HasLaborGoods(bot))
+            {
+                ClearLabor(bot);
+                return;
+            }
+            if (bot.InRange(bot.Destination, 2))
+            {
+                if (FindBanker(bot) != null && DepositLaborGoods(bot) > 0)
+                {
+                    PlayerBotService.RecordEvent(bot.Name + " banked a labor haul at " + bot.LaborReturnName + ".");
+                    ClearLabor(bot);
+                    return;
+                }
+                // A changed shard vendor layout is not a reason to deposit
+                // into an arbitrary container. Keep the haul and return the
+                // bot to ordinary travel instead.
+                ClearLabor(bot);
+                return;
+            }
+            PlayerBotService.TickTravelBehavior(bot);
+        }
+
+        private static Banker FindBanker(PlayerBot bot)
+        {
+            IPooledEnumerable nearby = bot.GetMobilesInRange(12);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var banker = mobile as Banker;
+                    if (banker != null && !banker.Deleted && banker.Alive) return banker;
+                }
+            }
+            finally { nearby.Free(); }
+            return null;
+        }
+
+        private static bool HasLaborGoods(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null) return false;
+            switch (bot.LaborKind)
+            {
+                case PlayerBotLaborKind.Miner: return bot.Backpack.FindItemByType<BaseOre>() != null;
+                case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null;
+                case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || bot.Backpack.FindItemByType<Dagger>() != null;
+                case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
+                default: return false;
+            }
+        }
+
+        private static int DepositLaborGoods(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null || bot.BankBox == null) return 0;
+            var goods = new List<Item>();
+            foreach (Item item in bot.Backpack.Items)
+            {
+                if ((bot.LaborKind == PlayerBotLaborKind.Miner && item is BaseOre)
+                    || (bot.LaborKind == PlayerBotLaborKind.Lumberjack && item is BaseLog)
+                    || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || item is Dagger))
+                    || (bot.LaborKind == PlayerBotLaborKind.Carpenter && (item is BaseWoodBoard || item is WoodenShield)))
+                    goods.Add(item);
+            }
+            foreach (var item in goods)
+            {
+                bot.Backpack.RemoveItem(item);
+                bot.BankBox.DropItem(item);
+            }
+            return goods.Count;
+        }
+
+        private static void ClearLabor(PlayerBot bot)
+        {
+            if (bot == null) return;
+            bot.LaborKind = PlayerBotLaborKind.None;
+            bot.LaborUntil = DateTime.MinValue;
+            bot.NextLaborAction = DateTime.MinValue;
+            bot.LaborReturning = false;
+            bot.LaborReturnName = "";
         }
 
         private static Item FindForge(PlayerBot bot)
