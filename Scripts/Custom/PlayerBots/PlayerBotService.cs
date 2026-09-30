@@ -1514,7 +1514,8 @@ namespace Server.CustomBots
             switch (bot.BankRole)
             {
                 case PlayerBotBankRole.Regular:
-                    TryBankSitterSpeech(bot, new[] { "bank", "LFG", "WTB regs", "anyone headed to a dungeon?" }, 0.25);
+                    if (!PlayerBotGuilds.TryGuildChat(bot))
+                        TryBankSitterSpeech(bot, new[] { "bank", "LFG", "WTB regs", "anyone headed to a dungeon?" }, 0.25);
                     break;
                 case PlayerBotBankRole.Hawker:
                     var wts = PlayerBotShop.WtsLine(bot);

@@ -11,6 +11,7 @@ namespace Server.CustomBots
     {
         private const string GuildName = "PlayerBot Fellowship";
         private const string GuildAbbreviation = "PBF";
+        private static readonly Dictionary<int, DateTime> NextGuildChat = new Dictionary<int, DateTime>();
 
         public static string FormNear(Mobile caller, int requestedCount)
         {
@@ -77,6 +78,32 @@ namespace Server.CustomBots
 
             guild.AddMember(player);
             return "You joined the PlayerBot Fellowship [" + GuildAbbreviation + "].";
+        }
+
+        // Guild.GuildChat is the shard's own recipient and packet path. A
+        // headless bot has no NetState, but any online player who deliberately
+        // joined the Fellowship receives the normal guild message. The short
+        // in-memory cooldown prevents bank sitters from turning it into spam.
+        public static bool TryGuildChat(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || !bot.Alive || Utility.RandomDouble() >= 0.18) return false;
+            var guild = FindBotGuild();
+            if (guild == null || bot.Guild != guild || guild.Members.Count < 2) return false;
+
+            DateTime next;
+            var now = DateTime.UtcNow;
+            if (NextGuildChat.TryGetValue(bot.Serial.Value, out next) && now < next) return false;
+
+            var lines = new[]
+            {
+                "Fellowship check-in. Anyone need a hand?",
+                "Holding the bank. Roads look clear from here.",
+                "LFG for a safe road run when the crew gathers.",
+                "Good hunting, Fellowship. Meet at the bank when ready."
+            };
+            guild.GuildChat(bot, lines[Utility.Random(lines.Length)]);
+            NextGuildChat[bot.Serial.Value] = now + TimeSpan.FromMinutes(Utility.RandomMinMax(2, 5));
+            return true;
         }
 
         private static Guild FindBotGuild()
