@@ -473,8 +473,43 @@ namespace Server.CustomBots
         private static void Tick(PlayerBot bot)
         {
             if (bot == null) return;
+            NormalizeCombatState(bot);
             if (DateTime.UtcNow < bot.NextAction) return;
             PlayerBotBehaviorRegistry.Tick(bot);
+        }
+
+        // PlayerBots own their combat scheduling rather than inheriting a
+        // BaseCreature AI loop. Every path that starts a fight sets warmode,
+        // so clear both engine fields here when neither a valid target nor a
+        // nearby live aggressor remains. This must run before NextAction so a
+        // bank sitter or paused traveler cannot visibly stay in war mode.
+        private static void NormalizeCombatState(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted) return;
+            var target = bot.Combatant as Mobile;
+            if (IsActiveCombatTarget(bot, target) || HasActiveAggressor(bot)) return;
+            bot.Combatant = null;
+            bot.Warmode = false;
+        }
+
+        private static bool IsActiveCombatTarget(PlayerBot bot, Mobile target)
+        {
+            if (bot == null || target == null || target.Deleted || !target.Alive || target.Map != bot.Map) return false;
+            var range = bot.BotRole == PlayerBotRole.PlayerKiller ? 18 : 12;
+            return bot.InRange(target, range);
+        }
+
+        private static bool HasActiveAggressor(PlayerBot bot)
+        {
+            if (bot == null) return false;
+            var range = bot.BotRole == PlayerBotRole.PlayerKiller ? 18 : 12;
+            foreach (AggressorInfo info in bot.Aggressors)
+            {
+                var attacker = info.Attacker as Mobile;
+                if (attacker != null && !attacker.Deleted && attacker.Alive
+                    && attacker.Map == bot.Map && bot.InRange(attacker, range)) return true;
+            }
+            return false;
         }
 
         // Core behavior adapters keep the lifecycle registry's interface
