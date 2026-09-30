@@ -117,7 +117,7 @@ namespace Server.CustomBots
             var closestDistance = Double.MaxValue;
             foreach (var bot in PlayerBotService.FindBots())
             {
-                if (!PlayerBotService.IsEligibleForAutonomousParty(bot) || Party.Get(bot) != null || bot.Map != player.Map
+                if (!PlayerBotService.IsEligibleForPlayerLedParty(bot) || Party.Get(bot) != null || bot.Map != player.Map
                     || !bot.InRange(player, 18)) continue;
                 var distance = bot.GetDistanceToSqrt(player);
                 if (distance >= closestDistance) continue;
@@ -131,6 +131,7 @@ namespace Server.CustomBots
             party = Party.Get(player);
             if (party == null) return "ServUO could not create the native party.";
             party.OnAccept(closest, true);
+            PlayerBotService.ResumeTravelAfterPartyFormation(closest);
             PlayerLedLeaders.Add(player.Serial.Value);
             return closest.Name + " joined your native party and will follow your lead.";
         }
@@ -413,7 +414,7 @@ namespace Server.CustomBots
                     if (recruits.Count == 4) break;
                 }
                 if (recruits.Count < 2) continue;
-                foreach (var member in recruits) PlayerBotService.ResumeTravelAfterPartyMuster(member);
+                foreach (var member in recruits) PlayerBotService.ResumeTravelAfterPartyFormation(member);
                 Form(recruits, "tavern LFG");
                 if (Utility.RandomDouble() < 0.25 && PlayerBotService.TryAssignNativePartyDungeonTrip(recruits))
                     PlayerBotService.RecordPartyEvent(leader.Name + " led the tavern crew on a verified dungeon expedition.");
