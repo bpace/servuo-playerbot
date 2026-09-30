@@ -5,6 +5,9 @@ using Server.Gumps;
 using Server.Items;
 using Server.Mobiles;
 using Server.SkillHandlers;
+using Server.Spells;
+using Server.Spells.First;
+using Server.Spells.Fourth;
 
 namespace Server.CustomBots
 {
@@ -1522,8 +1525,8 @@ namespace Server.CustomBots
                     if (!String.IsNullOrEmpty(wts) && Utility.RandomDouble() < 0.55) bot.Say(wts);
                     break;
                 case PlayerBotBankRole.ResistMacro:
-                    bot.Animate(32, 5, 1, true, false, 0);
-                    break;
+                    TickResistMacro(bot, now);
+                    return;
                 case PlayerBotBankRole.HidingMacro:
                     if (bot.Hidden)
                     {
@@ -1557,6 +1560,57 @@ namespace Server.CustomBots
 
             bot.NextBankAction = now + BankActionDelay(bot.BankRole);
             bot.NextAction = bot.NextBankAction;
+        }
+
+        // UO Offline's bank resist macro casts weak self-debuffs to exercise
+        // the real resistance path. Do not create a reagent kit or bypass a
+        // cast: a bot only continues while its own pack can support a native
+        // spell, and CheckHSequence owns mana, reagent, skill, and outcome.
+        private static void TickResistMacro(PlayerBot bot, DateTime now)
+        {
+            if (bot.Target != null)
+            {
+                bot.Target.Invoke(bot, bot);
+                bot.NextBankAction = now + BankActionDelay(PlayerBotBankRole.ResistMacro);
+                bot.NextAction = bot.NextBankAction;
+                return;
+            }
+
+            if (bot.Spell != null)
+            {
+                bot.NextBankAction = now + TimeSpan.FromSeconds(1);
+                bot.NextAction = bot.NextBankAction;
+                return;
+            }
+
+            var spell = PickResistSpell(bot);
+            if (spell == null)
+            {
+                bot.BankRole = PlayerBotBankRole.Regular;
+                bot.NextBankAction = now + BankActionDelay(bot.BankRole);
+                bot.NextAction = bot.NextBankAction;
+                return;
+            }
+
+            bot.NextBankAction = now + TimeSpan.FromSeconds(spell.Cast() ? 1 : 6);
+            bot.NextAction = bot.NextBankAction;
+        }
+
+        private static Spell PickResistSpell(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null) return null;
+            var pack = bot.Backpack;
+            if (pack.GetAmount(typeof(Bloodmoss)) > 0 && pack.GetAmount(typeof(Nightshade)) > 0)
+                return new ClumsySpell(bot, null);
+            if (pack.GetAmount(typeof(Garlic)) > 0 && pack.GetAmount(typeof(Nightshade)) > 0)
+                return new WeakenSpell(bot, null);
+            if (pack.GetAmount(typeof(Ginseng)) > 0 && pack.GetAmount(typeof(Nightshade)) > 0)
+                return new FeeblemindSpell(bot, null);
+            if (bot.Skills[SkillName.Magery].Base >= 26.0
+                && pack.GetAmount(typeof(Garlic)) > 0 && pack.GetAmount(typeof(Nightshade)) > 0
+                && pack.GetAmount(typeof(SulfurousAsh)) > 0)
+                return new CurseSpell(bot, null);
+            return null;
         }
 
         private static void TryBankSitterSpeech(PlayerBot bot, string[] lines, double chance)
