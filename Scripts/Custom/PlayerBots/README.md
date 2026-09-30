@@ -38,6 +38,8 @@ Autonomous parties use exact guild affiliation matching. Fellowship crews do not
 
 A player can instead lead a party by standing beside an eligible bot and using `[LeadBotParty`. Each use recruits one nearby bot through ServUO's native Party object. Player-led bots follow the player on the same facet and assist a valid combat target; they never teleport across a map or recruit players automatically.
 
+If a player-led party leader changes facet, a bot remains in the native party for two minutes in case the leader returns. It then leaves cleanly and resumes ordinary behavior rather than remaining attached to an unreachable leader.
+
 ## Native bot guild
 
 `[PlayerBots guild [2-10]` creates or extends the persistent ServUO guild `PlayerBot Fellowship [PBF]` using nearby living, unguilded PlayerBots. It uses the engine's normal guild roster and notoriety rules. A player can join only by standing beside a living Fellowship bot and running `[JoinBotGuild`; the command rejects already-guilded players. Bots never solicit or change real-player membership themselves.
