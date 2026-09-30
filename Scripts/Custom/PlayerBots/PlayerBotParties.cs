@@ -353,6 +353,39 @@ namespace Server.CustomBots
                 Form(recruits, "autonomous");
                 return;
             }
+
+            // Tavern visitors are already physically gathered at the same
+            // social destination. Turn that visible LFG moment into a normal
+            // native party, then clear the visit state so Party behavior can
+            // lead the group out on an ordinary route.
+            foreach (var leader in PlayerBotService.FindBots())
+            {
+                if (!IsTavernMusterCandidate(leader, null)) continue;
+                var recruits = new List<PlayerBot> { leader };
+                foreach (var candidate in PlayerBotService.FindBots())
+                {
+                    if (candidate == leader || Party.Get(candidate) != null || !IsTavernMusterCandidate(candidate, leader)) continue;
+                    if (!String.Equals(candidate.BankVisitName, leader.BankVisitName, StringComparison.Ordinal)) continue;
+                    if (leader.Guild != null && candidate.Guild != leader.Guild) continue;
+                    recruits.Add(candidate);
+                    if (recruits.Count == 4) break;
+                }
+                if (recruits.Count < 2) continue;
+                foreach (var member in recruits) PlayerBotService.ResumeTravelAfterPartyMuster(member);
+                Form(recruits, "tavern LFG");
+                return;
+            }
+        }
+
+        private static bool IsTavernMusterCandidate(PlayerBot bot, PlayerBot leader)
+        {
+            if (bot == null || bot.Deleted || !bot.Alive || bot.Map == null || bot.Map == Map.Internal
+                || Party.Get(bot) != null || (bot.BotRole != PlayerBotRole.Traveler && bot.BotRole != PlayerBotRole.Adventurer)
+                || !String.Equals(bot.BankVisitKind, "Tavern", StringComparison.OrdinalIgnoreCase)
+                || bot.BankVisitHome == Point3D.Zero || !bot.InRange(bot.BankVisitHome, 2)
+                || bot.Combatant != null || bot.LaborKind != PlayerBotLaborKind.None || bot.CorpseRecoverySerial != 0)
+                return false;
+            return leader == null || (bot.Map == leader.Map && bot.InRange(leader, 8));
         }
 
         private static void Form(List<PlayerBot> members, string kind)

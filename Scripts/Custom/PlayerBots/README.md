@@ -32,6 +32,8 @@ When a PlayerBot dies, its exact ServUO corpse serial is recorded for ten minute
 
 On UOR-or-later shards, `[PlayerBots party [2-10]` forms a normal ServUO `Party` from at least two living, unpartied PlayerBots within 18 tiles of the GM. The party is intentionally transient and ends after 15 minutes or when its leader is lost. Members use the existing native combat and movement paths, with followers closing on their leader. The mod does not invent party damage, loot, healing, chat, or packets. Pre-UOR shards reject the command because native player parties did not exist in that era. A real player can opt in by standing within 18 tiles of a party leader, using `[JoinBotParty`, then using ServUO's normal `/accept`; the bots never send unsolicited invitations.
 
+Idle Travelers and Adventurers who separately arrive at the same tavern may also form a two-to-four bot native party. This is a local LFG muster, never a teleport or player recruitment: every member must be at that tavern, unpartied, out of combat, and free of labor or corpse recovery. Their visit session ends before the party starts, so normal party movement takes them back onto regular routes.
+
 A player can instead lead a party by standing beside an eligible bot and using `[LeadBotParty`. Each use recruits one nearby bot through ServUO's native Party object. Player-led bots follow the player on the same facet and assist a valid combat target; they never teleport across a map or recruit players automatically.
 
 ## Native bot guild
