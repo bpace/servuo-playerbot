@@ -61,6 +61,7 @@ namespace Server.CustomBots
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(9, 15));
                     break;
                 case PlayerBotLaborKind.Blacksmith:
+                    TrySmeltOre(bot);
                     TryCraftDagger(bot);
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
                     break;
@@ -133,6 +134,37 @@ namespace Server.CustomBots
             var system = DefBlacksmithy.CraftSystem;
             var item = system.CraftItems.SearchFor(typeof(Dagger));
             if (item != null) item.Craft(bot, system, typeof(IronIngot), tool);
+        }
+
+        // Smelting must remain the native BaseOre interaction. It keeps the
+        // existing forge-range, mining-skill, ore-size, loss, and ingot rules
+        // instead of exchanging an ore item for a hand-created ingot.
+        private static void TrySmeltOre(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null || bot.Map == null) return;
+            var ore = bot.Backpack.FindItemByType<BaseOre>();
+            var forge = FindForge(bot);
+            if (ore == null || ore.Deleted || forge == null) return;
+
+            ore.OnDoubleClick(bot);
+            if (bot.Target != null) bot.Target.Invoke(bot, forge);
+        }
+
+        private static Item FindForge(PlayerBot bot)
+        {
+            IPooledEnumerable nearby = bot.Map.GetItemsInRange(bot.Location, 2);
+            try
+            {
+                foreach (Item item in nearby)
+                {
+                    if (item == null || item.Deleted) continue;
+                    if (item.GetType().IsDefined(typeof(ForgeAttribute), false)
+                        || item.ItemID == 4017 || (item.ItemID >= 6522 && item.ItemID <= 6569))
+                        return item;
+                }
+            }
+            finally { nearby.Free(); }
+            return null;
         }
     }
 }
