@@ -34,7 +34,8 @@ namespace Server.CustomBots
         Miner,
         Lumberjack,
         Blacksmith,
-        Carpenter
+        Carpenter,
+        Fisher
     }
 
     // A persistent PlayerMobile without a NetState. It deliberately uses
