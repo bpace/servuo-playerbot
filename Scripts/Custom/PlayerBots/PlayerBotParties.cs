@@ -345,7 +345,7 @@ namespace Server.CustomBots
                         || Party.Get(candidate) != null || candidate.Map != leader.Map || !candidate.InRange(leader, 8)) continue;
                     // A native guild is a real social affiliation, so its
                     // members muster as a crew instead of mixing randomly.
-                    if (leader.Guild != null && candidate.Guild != leader.Guild) continue;
+                    if (candidate.Guild != leader.Guild) continue;
                     recruits.Add(candidate);
                     if (recruits.Count == 4) break;
                 }
@@ -366,7 +366,7 @@ namespace Server.CustomBots
                 {
                     if (candidate == leader || Party.Get(candidate) != null || !IsTavernMusterCandidate(candidate, leader)) continue;
                     if (!String.Equals(candidate.BankVisitName, leader.BankVisitName, StringComparison.Ordinal)) continue;
-                    if (leader.Guild != null && candidate.Guild != leader.Guild) continue;
+                    if (candidate.Guild != leader.Guild) continue;
                     recruits.Add(candidate);
                     if (recruits.Count == 4) break;
                 }
