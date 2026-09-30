@@ -187,6 +187,9 @@ namespace Server.CustomBots
                 {
                     if (candidate == leader || !PlayerBotService.IsEligibleForAutonomousParty(candidate)
                         || Party.Get(candidate) != null || candidate.Map != leader.Map || !candidate.InRange(leader, 8)) continue;
+                    // A native guild is a real social affiliation, so its
+                    // members muster as a crew instead of mixing randomly.
+                    if (leader.Guild != null && candidate.Guild != leader.Guild) continue;
                     recruits.Add(candidate);
                     if (recruits.Count == 4) break;
                 }
