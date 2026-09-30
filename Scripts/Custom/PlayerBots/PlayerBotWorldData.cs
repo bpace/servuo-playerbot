@@ -296,6 +296,7 @@ namespace Server.CustomBots
                 foreach (var destination in _data.Destinations)
                     if (map != null && String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
                         && (String.IsNullOrEmpty(requiredKind) || String.Equals(destination.Kind, requiredKind, StringComparison.OrdinalIgnoreCase))
+                        && !IsGatherSiteKind(destination.Kind)
                         && !String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)
                         && !String.Equals(destination.Kind, "DungeonAscend", StringComparison.OrdinalIgnoreCase)
                         && !String.Equals(destination.Kind, "DungeonDescend", StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
@@ -318,6 +319,13 @@ namespace Server.CustomBots
                         matches.Add(destination);
             }
             return matches;
+        }
+
+        private static bool IsGatherSiteKind(string kind)
+        {
+            return String.Equals(kind, "MiningSpot", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "LumberSpot", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase);
         }
 
         // The graph import is data-only.  This is the single seam callers use
