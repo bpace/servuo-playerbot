@@ -34,9 +34,9 @@ namespace Server.CustomBots
         }
     }
 
-    // Real passive stock for a Hawker. This is deliberately not a trade
-    // system yet: an advertised item must exist, but no buyer can settle
-    // until native item/gold transfer is implemented and verified.
+    // Hawker stock is always a real item in the hawker's backpack. Crafted
+    // goods arrive through a completed labor route; ordinary fallback stock
+    // remains separate so a delivery never destroys an existing item.
     public static class PlayerBotShop
     {
         public static bool TryOpenShop(PlayerBot bot, Mobile buyer, string speech)
@@ -56,12 +56,18 @@ namespace Server.CustomBots
         public static Item EnsureHawkerStock(PlayerBot bot)
         {
             if (bot == null || bot.Backpack == null || bot.Deleted) return null;
+            Item fallback = null;
             foreach (Item item in bot.Backpack.Items)
             {
                 var marker = item as PlayerBotShopStockMarker;
                 if (marker != null && marker.Stock != null && !marker.Stock.Deleted
-                    && marker.Stock.Parent == bot.Backpack) return marker.Stock;
+                    && marker.Stock.Parent == bot.Backpack)
+                {
+                    if (IsCraftedGood(marker.Stock)) return marker.Stock;
+                    if (fallback == null) fallback = marker.Stock;
+                }
             }
+            if (fallback != null) return fallback;
 
             Item stock;
             switch (Utility.Random(4))
@@ -76,6 +82,48 @@ namespace Server.CustomBots
             return stock;
         }
 
+        // ServUO's standard vendor lists sell daggers for 21 gold and wooden
+        // shields for 30, while their corresponding buyback values are 10 and
+        // 15. A hawker pays that existing buyback value for a laborer's real
+        // craft and advertises the same item at the standard sale value.
+        public static bool TrySellCraftedGoods(PlayerBot worker)
+        {
+            if (worker == null || worker.Deleted || !worker.Alive || worker.Backpack == null || worker.Map == null) return false;
+            var goods = FindCraftedGoods(worker);
+            if (goods == null || goods.Deleted || goods.Amount <= 0) return false;
+            var paymentAmount = WholesalePrice(goods);
+            if (paymentAmount <= 0) return false;
+
+            IPooledEnumerable nearby = worker.GetMobilesInRange(12);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var hawker = mobile as PlayerBot;
+                    if (hawker == null || hawker == worker || hawker.Deleted || !hawker.Alive
+                        || hawker.BankRole != PlayerBotBankRole.Hawker || hawker.Backpack == null
+                        || !hawker.Backpack.CheckHold(hawker, goods, false, true)) continue;
+
+                    var purse = hawker.Backpack.FindItemByType<Gold>();
+                    if (purse == null || purse.Deleted || purse.Amount < paymentAmount
+                        || !worker.Backpack.CheckHold(worker, purse, false, true)) continue;
+
+                    var payment = TakeGold(hawker.Backpack, purse, paymentAmount);
+                    if (payment == null) return false;
+                    worker.Backpack.RemoveItem(goods);
+                    hawker.Backpack.DropItem(goods);
+                    worker.Backpack.DropItem(payment);
+                    hawker.Backpack.DropItem(new PlayerBotShopStockMarker(goods));
+                    worker.Say("Sold my finished work.");
+                    hawker.Say("I'll put it up for sale.");
+                    PlayerBotService.RecordEvent(worker.Name + " sold " + goods.Amount + " " + StockName(goods) + " to " + hawker.Name + ".");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
+        }
+
         public static string WtsLine(PlayerBot bot)
         {
             var stock = EnsureHawkerStock(bot);
@@ -87,6 +135,8 @@ namespace Server.CustomBots
             if (stock is Bandage) return stock.Amount * 2;
             if (stock is Garlic || stock is MandrakeRoot) return stock.Amount * 3;
             if (stock is Arrow) return stock.Amount;
+            if (stock is Dagger) return stock.Amount * 21;
+            if (stock is WoodenShield) return stock.Amount * 30;
             return 0;
         }
 
@@ -97,7 +147,44 @@ namespace Server.CustomBots
             if (stock is Garlic) return "garlic";
             if (stock is MandrakeRoot) return "mandrake root";
             if (stock is Arrow) return "arrows";
+            if (stock is Dagger) return "daggers";
+            if (stock is WoodenShield) return "wooden shields";
             return "goods";
+        }
+
+        private static bool IsCraftedGood(Item item)
+        {
+            return item is Dagger || item is WoodenShield;
+        }
+
+        private static Item FindCraftedGoods(PlayerBot worker)
+        {
+            if (worker.Backpack == null) return null;
+            foreach (Item item in worker.Backpack.Items)
+            {
+                if (IsCraftedGood(item)) return item;
+            }
+            return null;
+        }
+
+        private static int WholesalePrice(Item goods)
+        {
+            if (goods is Dagger) return goods.Amount * 10;
+            if (goods is WoodenShield) return goods.Amount * 15;
+            return 0;
+        }
+
+        private static Item TakeGold(Container pack, Gold gold, int amount)
+        {
+            if (pack == null || gold == null || gold.Deleted || amount <= 0 || amount > gold.Amount) return null;
+            if (amount == gold.Amount)
+            {
+                pack.RemoveItem(gold);
+                return gold;
+            }
+            var payment = Mobile.LiftItemDupe(gold, amount);
+            if (payment != null) pack.RemoveItem(payment);
+            return payment;
         }
 
         internal static bool TryPurchase(PlayerBot seller, Mobile buyer, Item stock)
