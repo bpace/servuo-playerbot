@@ -46,4 +46,6 @@ If a player-led party leader changes facet, a bot remains in the native party fo
 
 `[PlayerBots guild [2-10]` creates or extends the persistent ServUO guild `PlayerBot Fellowship [PBF]` using nearby living, unguilded PlayerBots. It uses the engine's normal guild roster and notoriety rules. A player can join only by standing beside a living Fellowship bot and running `[JoinBotGuild`; the command rejects already-guilded players. Bots never solicit or change real-player membership themselves.
 
+After a GM seeds the Fellowship, a member can occasionally recruit one nearby, unguilded Traveler or Adventurer only when both independently reached the same tavern, are out of combat, and are not in a party, labor shift, or recovery task. Recruitment uses the native guild roster and native guild chat; it never creates the Fellowship automatically or adds a real player.
+
 This is not endorsed by the ServUO project. Keep it in `Scripts/Custom/PlayerBots` so it remains a removable shard mod. Upstream attribution: https://github.com/Klein187/uo-offline, MIT License.

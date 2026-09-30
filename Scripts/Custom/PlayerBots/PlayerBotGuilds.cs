@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Server.Engines.PartySystem;
 using Server.Guilds;
 
 namespace Server.CustomBots
@@ -12,6 +13,8 @@ namespace Server.CustomBots
         private const string GuildName = "PlayerBot Fellowship";
         private const string GuildAbbreviation = "PBF";
         private static readonly Dictionary<int, DateTime> NextGuildChat = new Dictionary<int, DateTime>();
+        private static DateTime NextAutonomousRecruit = DateTime.MinValue;
+        private static readonly TimeSpan AutonomousRecruitInterval = TimeSpan.FromMinutes(3);
 
         public static string FormNear(Mobile caller, int requestedCount)
         {
@@ -104,6 +107,53 @@ namespace Server.CustomBots
             guild.GuildChat(bot, lines[Utility.Random(lines.Length)]);
             NextGuildChat[bot.Serial.Value] = now + TimeSpan.FromMinutes(Utility.RandomMinMax(2, 5));
             return true;
+        }
+
+        // A bot guild is seeded deliberately by a GM, while later membership
+        // can grow only through a visible, local tavern meeting. This keeps
+        // persistent affiliation native without silently touching a player or
+        // manufacturing a guild at an arbitrary world location.
+        public static void ReconcileAutonomousMembership()
+        {
+            var now = DateTime.UtcNow;
+            if (now < NextAutonomousRecruit) return;
+            NextAutonomousRecruit = now + AutonomousRecruitInterval;
+            if (Utility.RandomDouble() >= 0.25) return;
+
+            var guild = FindBotGuild();
+            if (guild == null) return;
+            foreach (var sponsor in PlayerBotService.FindBots())
+            {
+                if (!IsTavernRecruitSponsor(sponsor, guild)) continue;
+                foreach (var candidate in PlayerBotService.FindBots())
+                {
+                    if (!IsTavernRecruitCandidate(candidate, sponsor)) continue;
+                    if (!String.Equals(candidate.BankVisitName, sponsor.BankVisitName, StringComparison.Ordinal)) continue;
+                    guild.AddMember(candidate);
+                    guild.GuildChat(sponsor, candidate.Name + " joined the Fellowship at " + sponsor.BankVisitName + ".");
+                    PlayerBotService.RecordPartyEvent(candidate.Name + " joined the native PlayerBot Fellowship at " + sponsor.BankVisitName + ".");
+                    return;
+                }
+            }
+        }
+
+        private static bool IsTavernRecruitSponsor(PlayerBot bot, Guild guild)
+        {
+            return bot != null && !bot.Deleted && bot.Alive && bot.Guild == guild && Party.Get(bot) == null && bot.Map != null && bot.Map != Map.Internal
+                && (bot.BotRole == PlayerBotRole.Traveler || bot.BotRole == PlayerBotRole.Adventurer)
+                && String.Equals(bot.BankVisitKind, "Tavern", StringComparison.OrdinalIgnoreCase)
+                && bot.BankVisitHome != Point3D.Zero && bot.InRange(bot.BankVisitHome, 2)
+                && bot.Combatant == null && bot.LaborKind == PlayerBotLaborKind.None && bot.CorpseRecoverySerial == 0;
+        }
+
+        private static bool IsTavernRecruitCandidate(PlayerBot candidate, PlayerBot sponsor)
+        {
+            return candidate != null && candidate != sponsor && !candidate.Deleted && candidate.Alive && candidate.Guild == null && Party.Get(candidate) == null
+                && candidate.Map == sponsor.Map && candidate.InRange(sponsor, 8)
+                && (candidate.BotRole == PlayerBotRole.Traveler || candidate.BotRole == PlayerBotRole.Adventurer)
+                && String.Equals(candidate.BankVisitKind, "Tavern", StringComparison.OrdinalIgnoreCase)
+                && candidate.BankVisitHome != Point3D.Zero && candidate.InRange(candidate.BankVisitHome, 2)
+                && candidate.Combatant == null && candidate.LaborKind == PlayerBotLaborKind.None && candidate.CorpseRecoverySerial == 0;
         }
 
         private static Guild FindBotGuild()
