@@ -281,6 +281,8 @@ namespace Server.CustomBots
                     .Append(bot.BotRole).Append("\",\"map\":\"").Append(Escape(bot.Map == null ? "Internal" : bot.Map.Name))
                     .Append("\",\"x\":").Append(bot.X).Append(",\"y\":").Append(bot.Y)
                     .Append(",\"alive\":").Append(bot.Alive ? "true" : "false")
+                    .Append(",\"warmode\":").Append(bot.Warmode ? "true" : "false")
+                    .Append(",\"combatant\":\"").Append(Escape(bot.Combatant == null ? String.Empty : bot.Combatant.Name)).Append("\"")
                     .Append(",\"stuck\":").Append(IsStuck(bot, now) ? "true" : "false")
                     .Append(",\"destination\":\"").Append(Escape(bot.DestinationName)).Append("\"}");
             }
