@@ -615,6 +615,18 @@ namespace Server.CustomBots
                 && String.IsNullOrEmpty(bot.DungeonTravelState);
         }
 
+        // A real player may explicitly recruit an idle visitor at their side.
+        // Unlike autonomous formation, this allows a short tavern visit, but
+        // keeps permanent bank fixtures, active labor, recovery, dungeons,
+        // and ongoing combat out of player-led parties.
+        internal static bool IsEligibleForPlayerLedParty(PlayerBot bot)
+        {
+            return bot != null && !bot.Deleted && bot.Alive && bot.Map != null && bot.Map != Map.Internal
+                && (bot.BotRole == PlayerBotRole.Traveler || bot.BotRole == PlayerBotRole.Adventurer)
+                && !IsBankHubBot(bot) && bot.LaborKind == PlayerBotLaborKind.None && bot.CorpseRecoverySerial == 0
+                && String.IsNullOrEmpty(bot.DungeonTravelState) && bot.Combatant == null;
+        }
+
         internal static void RecordPartyEvent(string message)
         {
             RecordEvent(message);
@@ -1135,11 +1147,10 @@ namespace Server.CustomBots
             bot.NextBankVisitFollow = DateTime.MinValue;
         }
 
-        // A tavern party is formed only after every member reaches the same
-        // visitor destination. Once the native Party exists, release each
-        // member from its higher-priority visitor state so Party behavior can
-        // take over without a hidden move or a stale "Visiting" destination.
-        internal static void ResumeTravelAfterPartyMuster(PlayerBot bot)
+        // Party members can arrive from a higher-priority visitor state. Once
+        // a native party exists, release that state so Party behavior takes
+        // over without a hidden move or a stale "Visiting" destination.
+        internal static void ResumeTravelAfterPartyFormation(PlayerBot bot)
         {
             if (bot == null || bot.Deleted) return;
             ClearBankVisit(bot);
