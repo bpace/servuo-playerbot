@@ -232,12 +232,26 @@ namespace Server.CustomBots
         }
 
         // Work sites are authored stand points, not synthetic resource nodes.
-        // Gather sites must match ServUO's harvest definitions; smithies must
-        // contain the same anvil and forge identifiers the native craft system
-        // accepts. Other destinations retain their generic authoring contract.
+        // Gather sites must match ServUO's harvest definitions; workshops must
+        // contain the same nearby fixtures the native craft system accepts.
+        // Other destinations retain their generic authoring contract.
         private static bool ValidateWorkSite(Map map, string kind, int x, int y, int z, out string message)
         {
             message = null;
+            if (String.Equals(kind, "Kitchen", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsWalkable(map, x, y, z))
+                {
+                    message = "A cook worker must be placed on a walkable tile.";
+                    return false;
+                }
+                if (!HasHeatSource(map, x, y, z))
+                {
+                    message = "A kitchen needs a native heat source within two tiles.";
+                    return false;
+                }
+                return true;
+            }
             if (String.Equals(kind, "Carpentry", StringComparison.OrdinalIgnoreCase))
             {
                 if (!IsWalkable(map, x, y, z))
@@ -337,6 +351,45 @@ namespace Server.CustomBots
             return false;
         }
 
+        // Mirrors CraftItem.m_HeatSources and its two-tile, sixteen-Z overlap
+        // check, so an authored kitchen cannot schedule a cook where the native
+        // FishSteak recipe would reject the heat source.
+        private static bool HasHeatSource(Map map, int x, int y, int z)
+        {
+            IPooledEnumerable nearby = map.GetItemsInRange(new Point3D(x, y, z), 2);
+            try
+            {
+                foreach (Item item in nearby)
+                    if (item != null && !item.Deleted && Math.Abs(item.Z - z) < 16 && IsHeatSource(item.ItemID)) return true;
+            }
+            finally { nearby.Free(); }
+
+            for (var offsetX = -2; offsetX <= 2; offsetX++)
+            for (var offsetY = -2; offsetY <= 2; offsetY++)
+            {
+                var tiles = map.Tiles.GetStaticTiles(x + offsetX, y + offsetY, true);
+                for (var index = 0; index < tiles.Length; index++)
+                    if (Math.Abs(tiles[index].Z - z) < 16 && IsHeatSource(tiles[index].ID)) return true;
+            }
+            return false;
+        }
+
+        private static bool IsHeatSource(int itemID)
+        {
+            return (itemID >= 0x461 && itemID <= 0x48E)
+                || (itemID >= 0x92B && itemID <= 0x96C)
+                || (itemID >= 0xDE3 && itemID <= 0xDE9)
+                || itemID == 0xFAC
+                || (itemID >= 0x184A && itemID <= 0x1850)
+                || (itemID >= 0x398C && itemID <= 0x399F)
+                || (itemID >= 0x2DDB && itemID <= 0x2DDC)
+                || (itemID >= 0x19AA && itemID <= 0x19BB)
+                || (itemID >= 0x197A && itemID <= 0x19A9)
+                || itemID == 0x0FB1 || itemID == 0x2DD8
+                || (itemID >= 0xA2A4 && itemID <= 0xA2A5)
+                || (itemID >= 0xA2A8 && itemID <= 0xA2A9);
+        }
+
         public static PlayerBotDestination RandomDestination(Map map)
         {
             return RandomDestination(map, null);
@@ -384,7 +437,8 @@ namespace Server.CustomBots
                 || String.Equals(kind, "LumberSpot", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(kind, "Carpentry", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(kind, "Carpentry", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Kitchen", StringComparison.OrdinalIgnoreCase);
         }
 
         // The graph import is data-only.  This is the single seam callers use
