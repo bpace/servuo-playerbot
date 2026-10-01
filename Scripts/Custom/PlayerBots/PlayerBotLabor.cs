@@ -98,7 +98,7 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Blacksmith:
                     TryBuyNearbyOre(bot);
                     TrySmeltOre(bot);
-                    TryCraftDagger(bot);
+                    TryCraftBlacksmithProduct(bot);
                     bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(12, 18));
                     break;
                 case PlayerBotLaborKind.Carpenter:
@@ -307,11 +307,19 @@ namespace Server.CustomBots
             if (item != null) item.Craft(bot, system, typeof(RawFishSteak), FindOrCreateSkillet(bot));
         }
 
-        private static void TryCraftDagger(PlayerBot bot)
+        // Keep the profile small and backed by the ordinary blacksmith vendor
+        // list. A smith with enough real ingots sometimes chooses the native
+        // ten-ingot Broadsword recipe; otherwise it uses the existing Dagger
+        // recipe. CraftItem retains all skill, station, resource, and failure
+        // behavior.
+        private static void TryCraftBlacksmithProduct(PlayerBot bot)
         {
+            var ingots = bot == null || bot.Backpack == null ? null : bot.Backpack.FindItemByType<IronIngot>();
             var tool = FindOrCreateTongs(bot);
             var system = DefBlacksmithy.CraftSystem;
-            var item = system.CraftItems.SearchFor(typeof(Dagger));
+            var type = ingots != null && !ingots.Deleted && ingots.Amount >= 10 && Utility.RandomBool()
+                ? typeof(Broadsword) : typeof(Dagger);
+            var item = system.CraftItems.SearchFor(type);
             if (item != null) item.Craft(bot, system, typeof(IronIngot), tool);
         }
 
@@ -503,7 +511,7 @@ namespace Server.CustomBots
             {
                 case PlayerBotLaborKind.Miner: return bot.Backpack.FindItemByType<BaseOre>() != null;
                 case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null;
-                case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || bot.Backpack.FindItemByType<Dagger>() != null;
+                case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || bot.Backpack.FindItemByType<Dagger>() != null || bot.Backpack.FindItemByType<Broadsword>() != null;
                 case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
                 case PlayerBotLaborKind.Fisher: return bot.Backpack.FindItemByType<Fish>() != null;
                 case PlayerBotLaborKind.Cooker: return bot.Backpack.FindItemByType<Fish>() != null || bot.Backpack.FindItemByType<RawFishSteak>() != null || bot.Backpack.FindItemByType<FishSteak>() != null;
@@ -519,7 +527,7 @@ namespace Server.CustomBots
             {
                 if ((bot.LaborKind == PlayerBotLaborKind.Miner && item is BaseOre)
                     || (bot.LaborKind == PlayerBotLaborKind.Lumberjack && item is BaseLog)
-                    || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || item is Dagger))
+                    || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || item is Dagger || item is Broadsword))
                     || (bot.LaborKind == PlayerBotLaborKind.Carpenter && (item is BaseWoodBoard || item is WoodenShield))
                     || (bot.LaborKind == PlayerBotLaborKind.Fisher && item is Fish)
                     || (bot.LaborKind == PlayerBotLaborKind.Cooker && (item is Fish || item is RawFishSteak || item is FishSteak)))
