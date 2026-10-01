@@ -308,17 +308,24 @@ namespace Server.CustomBots
         }
 
         // Keep the profile small and backed by the ordinary blacksmith vendor
-        // list. A smith with enough real ingots sometimes chooses the native
-        // ten-ingot Broadsword recipe; otherwise it uses the existing Dagger
-        // recipe. CraftItem retains all skill, station, resource, and failure
-        // behavior.
+        // list. A smith chooses only native three-, eight-, or ten-ingot
+        // recipes from its actual iron stack. CraftItem retains all skill,
+        // station, resource, and failure behavior.
         private static void TryCraftBlacksmithProduct(PlayerBot bot)
         {
             var ingots = bot == null || bot.Backpack == null ? null : bot.Backpack.FindItemByType<IronIngot>();
             var tool = FindOrCreateTongs(bot);
             var system = DefBlacksmithy.CraftSystem;
-            var type = ingots != null && !ingots.Deleted && ingots.Amount >= 10 && Utility.RandomBool()
-                ? typeof(Broadsword) : typeof(Dagger);
+            var type = typeof(Dagger);
+            if (ingots != null && !ingots.Deleted)
+            {
+                if (ingots.Amount >= 10)
+                {
+                    var choice = Utility.Random(3);
+                    type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar) : typeof(Dagger);
+                }
+                else if (ingots.Amount >= 8 && Utility.RandomBool()) type = typeof(Cutlass);
+            }
             var item = system.CraftItems.SearchFor(type);
             if (item != null) item.Craft(bot, system, typeof(IronIngot), tool);
         }
