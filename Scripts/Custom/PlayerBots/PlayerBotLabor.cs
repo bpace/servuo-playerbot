@@ -321,8 +321,9 @@ namespace Server.CustomBots
             {
                 if (ingots.Amount >= 10)
                 {
-                    var choice = Utility.Random(3);
-                    type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar) : typeof(Dagger);
+                    var choice = Utility.Random(4);
+                    type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
+                        : choice == 2 ? typeof(PlateGorget) : typeof(Dagger);
                 }
                 else if (ingots.Amount >= 8 && Utility.RandomBool()) type = typeof(Cutlass);
             }

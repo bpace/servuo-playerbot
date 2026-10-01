@@ -290,20 +290,19 @@ namespace Server.CustomBots
             return false;
         }
 
-        // Crafted weapons and shields should enter the normal equipment path,
+        // Crafted combat equipment should enter the normal equipment path,
         // not accumulate as decorative backpack stock. Only purchase one when
         // its exact native layer is vacant; EquipItem then owns all conflicts
         // and eligibility checks without replacing existing equipment.
         private static bool CanUsePurchasedCombatItem(PlayerBot buyer, Item stock)
         {
-            if (!(stock is BaseWeapon) && !(stock is BaseShield)) return true;
-            if (stock.Layer != Layer.OneHanded && stock.Layer != Layer.TwoHanded) return false;
+            if (!(stock is BaseWeapon) && !(stock is BaseArmor)) return true;
             return buyer.FindItemOnLayer(stock.Layer) == null;
         }
 
         private static bool TryEquipPurchasedCombatItem(PlayerBot buyer, Item stock)
         {
-            if (!(stock is BaseWeapon) && !(stock is BaseShield)) return false;
+            if (!(stock is BaseWeapon) && !(stock is BaseArmor)) return false;
             return buyer.EquipItem(stock);
         }
 
@@ -322,6 +321,7 @@ namespace Server.CustomBots
             if (stock is Broadsword) return stock.Amount * 35;
             if (stock is Cutlass) return stock.Amount * 24;
             if (stock is Scimitar) return stock.Amount * 36;
+            if (stock is PlateGorget) return stock.Amount * 104;
             if (stock is WoodenShield) return stock.Amount * 30;
             if (stock is Fish) return stock.Amount * 6;
             if (stock is RawFishSteak) return stock.Amount * 3;
@@ -339,6 +339,7 @@ namespace Server.CustomBots
             if (stock is Broadsword) return "broadswords";
             if (stock is Cutlass) return "cutlasses";
             if (stock is Scimitar) return "scimitars";
+            if (stock is PlateGorget) return "plate gorgets";
             if (stock is WoodenShield) return "wooden shields";
             if (stock is Fish) return "fish";
             if (stock is RawFishSteak) return "raw fish steaks";
@@ -407,7 +408,7 @@ namespace Server.CustomBots
 
         private static bool IsRetailLaborGood(Item item)
         {
-            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is WoodenShield || item is Fish || item is RawFishSteak;
+            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is WoodenShield || item is Fish || item is RawFishSteak;
         }
 
         private static Item FindLaborGoods(PlayerBot worker)
@@ -426,7 +427,7 @@ namespace Server.CustomBots
             if (laborKind == PlayerBotLaborKind.Lumberjack) return item is BaseLog;
             if (laborKind == PlayerBotLaborKind.Fisher) return item is Fish;
             if (laborKind == PlayerBotLaborKind.Cooker) return item is Fish || item is RawFishSteak;
-            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar;
+            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget;
             if (laborKind == PlayerBotLaborKind.Carpenter) return item is WoodenShield;
             return false;
         }
@@ -437,6 +438,7 @@ namespace Server.CustomBots
             if (goods is Broadsword) return goods.Amount * 17;
             if (goods is Cutlass) return goods.Amount * 12;
             if (goods is Scimitar) return goods.Amount * 18;
+            if (goods is PlateGorget) return goods.Amount * 52;
             if (goods is WoodenShield) return goods.Amount * 15;
             if (goods is Fish || goods is RawFishSteak) return goods.Amount;
             if (goods is BaseOre || goods is BaseLog) return goods.Amount;
