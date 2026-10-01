@@ -24,6 +24,7 @@ namespace Server.CustomBots
         internal static bool StartAutonomousShift(PlayerBot bot, PlayerBotLaborKind kind)
         {
             if (bot == null || bot.LaborKind != PlayerBotLaborKind.None || bot.LaborReturning) return false;
+            if (kind == PlayerBotLaborKind.Blacksmith && !PlayerBotShop.TryWithdrawWorkshopOre(bot)) return false;
             bot.LaborReturnName = "";
             bot.LaborKind = kind;
             bot.LaborUntil = DateTime.UtcNow + ShiftLength;

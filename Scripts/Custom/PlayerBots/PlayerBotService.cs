@@ -634,13 +634,14 @@ namespace Server.CustomBots
             foreach (var worker in FindBots())
             {
                 if (!IsEligibleForAutonomousLabor(worker)) continue;
-                var firstKind = Utility.Random(3);
-                for (var offset = 0; offset < 3; offset++)
+                var firstKind = Utility.Random(4);
+                for (var offset = 0; offset < 4; offset++)
                 {
-                    var kind = (firstKind + offset) % 3;
+                    var kind = (firstKind + offset) % 4;
                     if ((kind == 0 && TryAssignAutonomousLabor(worker, "MiningSpot", PlayerBotLaborKind.Miner))
                         || (kind == 1 && TryAssignAutonomousLabor(worker, "LumberSpot", PlayerBotLaborKind.Lumberjack))
-                        || (kind == 2 && TryAssignAutonomousLabor(worker, "FishingSpot", PlayerBotLaborKind.Fisher))) return;
+                        || (kind == 2 && TryAssignAutonomousLabor(worker, "FishingSpot", PlayerBotLaborKind.Fisher))
+                        || (kind == 3 && TryAssignAutonomousLabor(worker, "Smithy", PlayerBotLaborKind.Blacksmith, true))) return;
                 }
             }
         }
@@ -651,7 +652,7 @@ namespace Server.CustomBots
                 && Server.Engines.PartySystem.Party.Get(bot) == null && !PendingAutonomousLabor.ContainsKey(bot.Serial.Value);
         }
 
-        private static bool TryAssignAutonomousLabor(PlayerBot worker, string siteKind, PlayerBotLaborKind laborKind)
+        private static bool TryAssignAutonomousLabor(PlayerBot worker, string siteKind, PlayerBotLaborKind laborKind, bool requiresWorkshopOre = false)
         {
             var sites = PlayerBotWorldData.GetDestinations(worker.Map, siteKind);
             if (sites.Count == 0) return false;
@@ -660,6 +661,7 @@ namespace Server.CustomBots
                 var index = Utility.Random(sites.Count);
                 var site = sites[index];
                 sites.RemoveAt(index);
+                if (requiresWorkshopOre && !HasWorkshopOreAt(worker.Map, new Point3D(site.X, site.Y, site.Z))) continue;
                 var occupied = false;
                 foreach (var bot in FindBots())
                     if (bot != worker && bot.Map == worker.Map && String.Equals(bot.DestinationName, site.Name, StringComparison.OrdinalIgnoreCase))
@@ -677,6 +679,15 @@ namespace Server.CustomBots
                 RecordEvent(worker.Name + " is traveling to " + site.Name + " for a " + laborKind.ToString().ToLowerInvariant() + " shift.");
                 return true;
             }
+            return false;
+        }
+
+        private static bool HasWorkshopOreAt(Map map, Point3D location)
+        {
+            foreach (var bot in FindBots())
+                if (bot != null && !bot.Deleted && bot.Alive && bot.Map == map
+                    && bot.BankRole == PlayerBotBankRole.Hawker && bot.InRange(location, 4)
+                    && PlayerBotShop.HasWorkshopOre(bot)) return true;
             return false;
         }
 

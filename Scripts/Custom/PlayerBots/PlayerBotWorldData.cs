@@ -373,7 +373,8 @@ namespace Server.CustomBots
         {
             return String.Equals(kind, "MiningSpot", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "LumberSpot", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase);
         }
 
         // The graph import is data-only.  This is the single seam callers use
