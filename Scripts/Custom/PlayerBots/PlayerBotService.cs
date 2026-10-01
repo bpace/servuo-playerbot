@@ -634,9 +634,14 @@ namespace Server.CustomBots
             foreach (var worker in FindBots())
             {
                 if (!IsEligibleForAutonomousLabor(worker)) continue;
-                if (TryAssignAutonomousLabor(worker, "MiningSpot", PlayerBotLaborKind.Miner)
-                    || TryAssignAutonomousLabor(worker, "LumberSpot", PlayerBotLaborKind.Lumberjack)
-                    || TryAssignAutonomousLabor(worker, "FishingSpot", PlayerBotLaborKind.Fisher)) return;
+                var firstKind = Utility.Random(3);
+                for (var offset = 0; offset < 3; offset++)
+                {
+                    var kind = (firstKind + offset) % 3;
+                    if ((kind == 0 && TryAssignAutonomousLabor(worker, "MiningSpot", PlayerBotLaborKind.Miner))
+                        || (kind == 1 && TryAssignAutonomousLabor(worker, "LumberSpot", PlayerBotLaborKind.Lumberjack))
+                        || (kind == 2 && TryAssignAutonomousLabor(worker, "FishingSpot", PlayerBotLaborKind.Fisher))) return;
+                }
             }
         }
 
@@ -650,20 +655,29 @@ namespace Server.CustomBots
         {
             var sites = PlayerBotWorldData.GetDestinations(worker.Map, siteKind);
             if (sites.Count == 0) return false;
-            var site = sites[Utility.Random(sites.Count)];
-            foreach (var bot in FindBots())
-                if (bot != worker && bot.Map == worker.Map && String.Equals(bot.DestinationName, site.Name, StringComparison.OrdinalIgnoreCase))
-                    return false;
+            while (sites.Count > 0)
+            {
+                var index = Utility.Random(sites.Count);
+                var site = sites[index];
+                sites.RemoveAt(index);
+                var occupied = false;
+                foreach (var bot in FindBots())
+                    if (bot != worker && bot.Map == worker.Map && String.Equals(bot.DestinationName, site.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        occupied = true;
+                        break;
+                    }
+                if (occupied || (!worker.InRange(new Point3D(site.X, site.Y, site.Z), 2)
+                    && !PlayerBotWorldData.TryPlanRoute(worker, site))) continue;
 
-            if (!worker.InRange(new Point3D(site.X, site.Y, site.Z), 2)
-                && !PlayerBotWorldData.TryPlanRoute(worker, site)) return false;
-
-            worker.Destination = new Point3D(site.X, site.Y, site.Z);
-            worker.DestinationName = site.Name;
-            worker.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-            PendingAutonomousLabor[worker.Serial.Value] = laborKind;
-            RecordEvent(worker.Name + " is traveling to " + site.Name + " for a " + laborKind.ToString().ToLowerInvariant() + " shift.");
-            return true;
+                worker.Destination = new Point3D(site.X, site.Y, site.Z);
+                worker.DestinationName = site.Name;
+                worker.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+                PendingAutonomousLabor[worker.Serial.Value] = laborKind;
+                RecordEvent(worker.Name + " is traveling to " + site.Name + " for a " + laborKind.ToString().ToLowerInvariant() + " shift.");
+                return true;
+            }
+            return false;
         }
 
         // A real player may explicitly recruit an idle visitor at their side.
