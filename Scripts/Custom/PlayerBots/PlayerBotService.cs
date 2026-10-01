@@ -1713,6 +1713,8 @@ namespace Server.CustomBots
             switch (bot.BankRole)
             {
                 case PlayerBotBankRole.Regular:
+                    if (Utility.RandomDouble() < 0.10 && PlayerBotShop.TryBuyNearbyHawkerStock(bot))
+                        break;
                     if (!PlayerBotGuilds.TryGuildChat(bot))
                         TryBankSitterSpeech(bot, new[] { "bank", "LFG", "WTB regs", "anyone headed to a dungeon?" }, 0.25);
                     break;
