@@ -263,7 +263,8 @@ namespace Server.CustomBots
                     var stock = FindExistingHawkerStock(hawker);
                     var price = Price(stock);
                     if (stock == null || stock.Deleted || price <= 0 || stock.Parent != hawker.Backpack
-                        || !buyer.Backpack.CheckHold(buyer, stock, false, true)) continue;
+                        || !buyer.Backpack.CheckHold(buyer, stock, false, true)
+                        || !CanUsePurchasedCombatItem(buyer, stock)) continue;
 
                     var purse = buyer.Backpack.FindItemByType<Gold>();
                     if (purse == null || purse.Deleted || purse.Amount < price) continue;
@@ -278,14 +279,32 @@ namespace Server.CustomBots
                         var marker = item as PlayerBotShopStockMarker;
                         if (marker != null && marker.Stock == stock) marker.Delete();
                     }
+                    var equipped = TryEquipPurchasedCombatItem(buyer, stock);
                     buyer.Say("I'll take those.");
                     hawker.Say("A fair trade.");
-                    PlayerBotService.RecordEvent(buyer.Name + " bought " + stock.Amount + " " + StockName(stock) + " from " + hawker.Name + " for " + price + " gold.");
+                    PlayerBotService.RecordEvent(buyer.Name + " bought " + stock.Amount + " " + StockName(stock) + " from " + hawker.Name + " for " + price + " gold" + (equipped ? " and equipped it." : "."));
                     return true;
                 }
             }
             finally { nearby.Free(); }
             return false;
+        }
+
+        // Crafted weapons and shields should enter the normal equipment path,
+        // not accumulate as decorative backpack stock. Only purchase one when
+        // its exact native layer is vacant; EquipItem then owns all conflicts
+        // and eligibility checks without replacing existing equipment.
+        private static bool CanUsePurchasedCombatItem(PlayerBot buyer, Item stock)
+        {
+            if (!(stock is BaseWeapon) && !(stock is BaseShield)) return true;
+            if (stock.Layer != Layer.OneHanded && stock.Layer != Layer.TwoHanded) return false;
+            return buyer.FindItemOnLayer(stock.Layer) == null;
+        }
+
+        private static bool TryEquipPurchasedCombatItem(PlayerBot buyer, Item stock)
+        {
+            if (!(stock is BaseWeapon) && !(stock is BaseShield)) return false;
+            return buyer.EquipItem(stock);
         }
 
         public static string WtsLine(PlayerBot bot)
