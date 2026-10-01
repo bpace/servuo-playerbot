@@ -88,6 +88,12 @@ namespace Server.CustomBots
             return FindWorkshopOre(hawker, out marker) != null;
         }
 
+        internal static bool HasWorkshopLogs(PlayerBot hawker)
+        {
+            PlayerBotShopStockMarker marker;
+            return FindWorkshopLogs(hawker, out marker) != null;
+        }
+
         // The transfer is deliberately local. The harvester was already paid
         // when its real stack reached this hawker; the smith only takes that
         // marked stock when both bots stand together at an authored workshop.
@@ -113,6 +119,35 @@ namespace Server.CustomBots
                     smith.Say("I'll put this ore to work.");
                     hawker.Say("The workshop stock is yours.");
                     PlayerBotService.RecordEvent(smith.Name + " withdrew " + ore.Amount + " ore from " + hawker.Name + " for smithing.");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
+        }
+
+        internal static bool TryWithdrawWorkshopLogs(PlayerBot carpenter)
+        {
+            if (carpenter == null || carpenter.Deleted || !carpenter.Alive || carpenter.Backpack == null || carpenter.Map == null) return false;
+            IPooledEnumerable nearby = carpenter.GetMobilesInRange(4);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var hawker = mobile as PlayerBot;
+                    if (hawker == null || hawker == carpenter || hawker.Deleted || !hawker.Alive
+                        || hawker.BankRole != PlayerBotBankRole.Hawker || hawker.Backpack == null) continue;
+
+                    PlayerBotShopStockMarker marker;
+                    var logs = FindWorkshopLogs(hawker, out marker);
+                    if (logs == null || marker == null || !carpenter.Backpack.CheckHold(carpenter, logs, false, true)) continue;
+
+                    hawker.Backpack.RemoveItem(logs);
+                    carpenter.Backpack.DropItem(logs);
+                    marker.Delete();
+                    carpenter.Say("I'll make something useful from these.");
+                    hawker.Say("The workshop stock is yours.");
+                    PlayerBotService.RecordEvent(carpenter.Name + " withdrew " + logs.Amount + " logs from " + hawker.Name + " for carpentry.");
                     return true;
                 }
             }
@@ -216,6 +251,23 @@ namespace Server.CustomBots
                 {
                     result = marker;
                     return ore;
+                }
+            }
+            return null;
+        }
+
+        private static BaseLog FindWorkshopLogs(PlayerBot hawker, out PlayerBotShopStockMarker result)
+        {
+            result = null;
+            if (hawker == null || hawker.Backpack == null) return null;
+            foreach (Item item in hawker.Backpack.Items)
+            {
+                var marker = item as PlayerBotShopStockMarker;
+                var logs = marker == null ? null : marker.Stock as BaseLog;
+                if (logs != null && !logs.Deleted && logs.Parent == hawker.Backpack)
+                {
+                    result = marker;
+                    return logs;
                 }
             }
             return null;
