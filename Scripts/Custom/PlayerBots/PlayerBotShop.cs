@@ -63,8 +63,8 @@ namespace Server.CustomBots
                 if (marker != null && marker.Stock != null && !marker.Stock.Deleted
                     && marker.Stock.Parent == bot.Backpack)
                 {
-                    if (IsLaborGood(marker.Stock)) return marker.Stock;
-                    if (fallback == null) fallback = marker.Stock;
+                    if (IsRetailLaborGood(marker.Stock)) return marker.Stock;
+                    if (!IsTradeGood(marker.Stock) && fallback == null) fallback = marker.Stock;
                 }
             }
             if (fallback != null) return fallback;
@@ -115,8 +115,8 @@ namespace Server.CustomBots
                     hawker.Backpack.DropItem(goods);
                     worker.Backpack.DropItem(payment);
                     hawker.Backpack.DropItem(new PlayerBotShopStockMarker(goods));
-                    worker.Say("Sold my finished work.");
-                    hawker.Say("I'll put it up for sale.");
+                    worker.Say(IsRetailLaborGood(goods) ? "Sold my finished work." : "Delivered my harvest.");
+                    hawker.Say(IsRetailLaborGood(goods) ? "I'll put it up for sale." : "I'll hold it for the workshop.");
                     PlayerBotService.RecordEvent(worker.Name + " sold " + goods.Amount + " " + StockName(goods) + " to " + hawker.Name + ".");
                     return true;
                 }
@@ -157,7 +157,16 @@ namespace Server.CustomBots
             return "goods";
         }
 
-        private static bool IsLaborGood(Item item)
+        // Ore and logs use the existing one-gold local labor rate from the
+        // miner/smith and lumberjack/carpenter exchanges. A hawker holds them
+        // as private workshop stock, never player-facing store stock, because
+        // ServUO's vendor lists do not provide a matching raw-ore retail value.
+        private static bool IsTradeGood(Item item)
+        {
+            return item is BaseOre || item is BaseLog || IsRetailLaborGood(item);
+        }
+
+        private static bool IsRetailLaborGood(Item item)
         {
             return item is Dagger || item is WoodenShield || item is Fish || item is RawFishSteak;
         }
@@ -167,9 +176,20 @@ namespace Server.CustomBots
             if (worker.Backpack == null) return null;
             foreach (Item item in worker.Backpack.Items)
             {
-                if (IsLaborGood(item)) return item;
+                if (IsDeliveredTradeGood(worker.LaborKind, item)) return item;
             }
             return null;
+        }
+
+        private static bool IsDeliveredTradeGood(PlayerBotLaborKind laborKind, Item item)
+        {
+            if (laborKind == PlayerBotLaborKind.Miner) return item is BaseOre;
+            if (laborKind == PlayerBotLaborKind.Lumberjack) return item is BaseLog;
+            if (laborKind == PlayerBotLaborKind.Fisher) return item is Fish;
+            if (laborKind == PlayerBotLaborKind.Cooker) return item is Fish || item is RawFishSteak;
+            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger;
+            if (laborKind == PlayerBotLaborKind.Carpenter) return item is WoodenShield;
+            return false;
         }
 
         private static int WholesalePrice(Item goods)
@@ -177,6 +197,7 @@ namespace Server.CustomBots
             if (goods is Dagger) return goods.Amount * 10;
             if (goods is WoodenShield) return goods.Amount * 15;
             if (goods is Fish || goods is RawFishSteak) return goods.Amount;
+            if (goods is BaseOre || goods is BaseLog) return goods.Amount;
             return 0;
         }
 
