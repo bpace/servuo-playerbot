@@ -491,6 +491,16 @@ namespace Server.CustomBots
         private static void NormalizeCombatState(PlayerBot bot)
         {
             if (bot == null || bot.Deleted) return;
+            // A permanent bank fixture is a population behavior, not an
+            // unattended guard. Bank sitting outranks Combat in the registry,
+            // so keeping a valid old target here would show war mode without
+            // ever entering the attack path. Clear both fields together.
+            if (IsBankHubBot(bot))
+            {
+                bot.Combatant = null;
+                bot.Warmode = false;
+                return;
+            }
             var target = bot.Combatant as Mobile;
             if (IsActiveCombatTarget(bot, target) || HasActiveAggressor(bot)) return;
             bot.Combatant = null;
