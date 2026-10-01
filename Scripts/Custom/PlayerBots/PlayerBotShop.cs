@@ -56,18 +56,8 @@ namespace Server.CustomBots
         public static Item EnsureHawkerStock(PlayerBot bot)
         {
             if (bot == null || bot.Backpack == null || bot.Deleted) return null;
-            Item fallback = null;
-            foreach (Item item in bot.Backpack.Items)
-            {
-                var marker = item as PlayerBotShopStockMarker;
-                if (marker != null && marker.Stock != null && !marker.Stock.Deleted
-                    && marker.Stock.Parent == bot.Backpack)
-                {
-                    if (IsRetailLaborGood(marker.Stock)) return marker.Stock;
-                    if (!IsTradeGood(marker.Stock) && fallback == null) fallback = marker.Stock;
-                }
-            }
-            if (fallback != null) return fallback;
+            var existing = FindExistingHawkerStock(bot);
+            if (existing != null) return existing;
 
             Item stock;
             switch (Utility.Random(4))
@@ -80,6 +70,24 @@ namespace Server.CustomBots
             bot.Backpack.DropItem(stock);
             bot.Backpack.DropItem(new PlayerBotShopStockMarker(stock));
             return stock;
+        }
+
+        private static Item FindExistingHawkerStock(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null || bot.Deleted) return null;
+            Item fallback = null;
+            foreach (Item item in bot.Backpack.Items)
+            {
+                var marker = item as PlayerBotShopStockMarker;
+                if (marker != null && marker.Stock != null && !marker.Stock.Deleted
+                    && marker.Stock.Parent == bot.Backpack)
+                {
+                    if (IsRetailLaborGood(marker.Stock)) return marker.Stock;
+                    if (!IsTradeGood(marker.Stock) && fallback == null) fallback = marker.Stock;
+                }
+            }
+            if (fallback != null) return fallback;
+            return null;
         }
 
         internal static bool HasWorkshopOre(PlayerBot hawker)
@@ -228,6 +236,51 @@ namespace Server.CustomBots
                     worker.Say(IsRetailLaborGood(goods) ? "Sold my finished work." : "Delivered my harvest.");
                     hawker.Say(IsRetailLaborGood(goods) ? "I'll put it up for sale." : "I'll hold it for the workshop.");
                     PlayerBotService.RecordEvent(worker.Name + " sold " + goods.Amount + " " + StockName(goods) + " to " + hawker.Name + ".");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
+        }
+
+        // Bank regulars may occasionally complete the same local transaction
+        // a player would: a marked physical stack moves from a nearby hawker
+        // and the buyer's existing backpack gold moves back. This keeps bot
+        // demand bounded to a visible market stall without creating currency,
+        // stock, routes, or a parallel vendor protocol.
+        internal static bool TryBuyNearbyHawkerStock(PlayerBot buyer)
+        {
+            if (buyer == null || buyer.Deleted || !buyer.Alive || buyer.Backpack == null || buyer.Map == null) return false;
+            IPooledEnumerable nearby = buyer.GetMobilesInRange(8);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var hawker = mobile as PlayerBot;
+                    if (hawker == null || hawker == buyer || hawker.Deleted || !hawker.Alive
+                        || hawker.BankRole != PlayerBotBankRole.Hawker || hawker.Backpack == null) continue;
+
+                    var stock = FindExistingHawkerStock(hawker);
+                    var price = Price(stock);
+                    if (stock == null || stock.Deleted || price <= 0 || stock.Parent != hawker.Backpack
+                        || !buyer.Backpack.CheckHold(buyer, stock, false, true)) continue;
+
+                    var purse = buyer.Backpack.FindItemByType<Gold>();
+                    if (purse == null || purse.Deleted || purse.Amount < price) continue;
+                    var payment = TakeGold(buyer.Backpack, purse, price);
+                    if (payment == null) continue;
+
+                    hawker.Backpack.RemoveItem(stock);
+                    buyer.Backpack.DropItem(stock);
+                    hawker.Backpack.DropItem(payment);
+                    foreach (Item item in hawker.Backpack.Items)
+                    {
+                        var marker = item as PlayerBotShopStockMarker;
+                        if (marker != null && marker.Stock == stock) marker.Delete();
+                    }
+                    buyer.Say("I'll take those.");
+                    hawker.Say("A fair trade.");
+                    PlayerBotService.RecordEvent(buyer.Name + " bought " + stock.Amount + " " + StockName(stock) + " from " + hawker.Name + " for " + price + " gold.");
                     return true;
                 }
             }
