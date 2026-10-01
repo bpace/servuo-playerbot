@@ -283,6 +283,7 @@ namespace Server.CustomBots
                     .Append(",\"alive\":").Append(bot.Alive ? "true" : "false")
                     .Append(",\"warmode\":").Append(bot.Warmode ? "true" : "false")
                     .Append(",\"combatant\":\"").Append(Escape(bot.Combatant == null ? String.Empty : bot.Combatant.Name)).Append("\"")
+                    .Append(",\"labor\":\"").Append(Escape(PlayerBotService.GetLaborStatus(bot))).Append("\"")
                     .Append(",\"stuck\":").Append(IsStuck(bot, now) ? "true" : "false")
                     .Append(",\"destination\":\"").Append(Escape(bot.DestinationName)).Append("\"}");
             }

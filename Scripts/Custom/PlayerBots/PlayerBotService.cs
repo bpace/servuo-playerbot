@@ -735,6 +735,17 @@ namespace Server.CustomBots
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 6));
         }
 
+        internal static string GetLaborStatus(PlayerBot bot)
+        {
+            if (bot == null) return "";
+            PlayerBotLaborKind pending;
+            if (PendingAutonomousLabor.TryGetValue(bot.Serial.Value, out pending))
+                return "Traveling to " + pending.ToString().ToLowerInvariant() + " shift";
+            if (bot.LaborReturning) return "Hauling to " + bot.LaborReturnName;
+            if (PlayerBotLabor.IsActive(bot)) return "Working as " + bot.LaborKind.ToString().ToLowerInvariant();
+            return "";
+        }
+
         private static bool TryStartAutonomousLabor(PlayerBot bot)
         {
             PlayerBotLaborKind kind;
