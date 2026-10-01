@@ -714,8 +714,31 @@ namespace Server.CustomBots
 
         internal static void TickCombatBehavior(PlayerBot bot)
         {
+            if (TryBandageSelf(bot))
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+                return;
+            }
             if (!TryFight(bot)) return;
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+        }
+
+        // Keep solo combat inside ServUO's ordinary healing path. The bot must
+        // already be in combat behavior, below two-thirds health, and carrying
+        // a real Bandage. BandageContext owns timing, skill checks, poison and
+        // hit changes; this only starts an accepted self-heal and consumes that
+        // physical bandage.
+        private static bool TryBandageSelf(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || !bot.Alive || bot.Backpack == null
+                || bot.HitsMax <= 0 || bot.Hits * 3 >= bot.HitsMax * 2
+                || BandageContext.GetContext(bot) != null) return false;
+
+            var bandage = bot.Backpack.FindItemByType<Bandage>();
+            if (bandage == null || bandage.Deleted || BandageContext.BeginHeal(bot, bot) == null) return false;
+            NegativeAttributes.OnCombatAction(bot);
+            bandage.Consume();
+            return true;
         }
 
         internal static void TickTravelBehavior(PlayerBot bot)
