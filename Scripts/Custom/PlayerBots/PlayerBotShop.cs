@@ -94,6 +94,12 @@ namespace Server.CustomBots
             return FindWorkshopLogs(hawker, out marker) != null;
         }
 
+        internal static bool HasWorkshopFish(PlayerBot hawker)
+        {
+            PlayerBotShopStockMarker marker;
+            return FindWorkshopFish(hawker, out marker) != null;
+        }
+
         // The transfer is deliberately local. The harvester was already paid
         // when its real stack reached this hawker; the smith only takes that
         // marked stock when both bots stand together at an authored workshop.
@@ -148,6 +154,37 @@ namespace Server.CustomBots
                     carpenter.Say("I'll make something useful from these.");
                     hawker.Say("The workshop stock is yours.");
                     PlayerBotService.RecordEvent(carpenter.Name + " withdrew " + logs.Amount + " logs from " + hawker.Name + " for carpentry.");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
+        }
+
+        // A cook only takes actual caught Fish already delivered to the local
+        // hawker. Raw steaks and cooked food stay player-facing retail stock.
+        internal static bool TryWithdrawWorkshopFish(PlayerBot cooker)
+        {
+            if (cooker == null || cooker.Deleted || !cooker.Alive || cooker.Backpack == null || cooker.Map == null) return false;
+            IPooledEnumerable nearby = cooker.GetMobilesInRange(4);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var hawker = mobile as PlayerBot;
+                    if (hawker == null || hawker == cooker || hawker.Deleted || !hawker.Alive
+                        || hawker.BankRole != PlayerBotBankRole.Hawker || hawker.Backpack == null) continue;
+
+                    PlayerBotShopStockMarker marker;
+                    var fish = FindWorkshopFish(hawker, out marker);
+                    if (fish == null || marker == null || !cooker.Backpack.CheckHold(cooker, fish, false, true)) continue;
+
+                    hawker.Backpack.RemoveItem(fish);
+                    cooker.Backpack.DropItem(fish);
+                    marker.Delete();
+                    cooker.Say("I'll cook this catch.");
+                    hawker.Say("The kitchen stock is yours.");
+                    PlayerBotService.RecordEvent(cooker.Name + " withdrew " + fish.Amount + " fish from " + hawker.Name + " for cooking.");
                     return true;
                 }
             }
@@ -268,6 +305,23 @@ namespace Server.CustomBots
                 {
                     result = marker;
                     return logs;
+                }
+            }
+            return null;
+        }
+
+        private static Fish FindWorkshopFish(PlayerBot hawker, out PlayerBotShopStockMarker result)
+        {
+            result = null;
+            if (hawker == null || hawker.Backpack == null) return null;
+            foreach (Item item in hawker.Backpack.Items)
+            {
+                var marker = item as PlayerBotShopStockMarker;
+                var fish = marker == null ? null : marker.Stock as Fish;
+                if (fish != null && !fish.Deleted && fish.Parent == hawker.Backpack)
+                {
+                    result = marker;
+                    return fish;
                 }
             }
             return null;

@@ -634,15 +634,16 @@ namespace Server.CustomBots
             foreach (var worker in FindBots())
             {
                 if (!IsEligibleForAutonomousLabor(worker)) continue;
-                var firstKind = Utility.Random(5);
-                for (var offset = 0; offset < 5; offset++)
+                var firstKind = Utility.Random(6);
+                for (var offset = 0; offset < 6; offset++)
                 {
-                    var kind = (firstKind + offset) % 5;
+                    var kind = (firstKind + offset) % 6;
                     if ((kind == 0 && TryAssignAutonomousLabor(worker, "MiningSpot", PlayerBotLaborKind.Miner))
                         || (kind == 1 && TryAssignAutonomousLabor(worker, "LumberSpot", PlayerBotLaborKind.Lumberjack))
                         || (kind == 2 && TryAssignAutonomousLabor(worker, "FishingSpot", PlayerBotLaborKind.Fisher))
                         || (kind == 3 && TryAssignAutonomousLabor(worker, "Smithy", PlayerBotLaborKind.Blacksmith, true))
-                        || (kind == 4 && TryAssignAutonomousLabor(worker, "Carpentry", PlayerBotLaborKind.Carpenter, true))) return;
+                        || (kind == 4 && TryAssignAutonomousLabor(worker, "Carpentry", PlayerBotLaborKind.Carpenter, true))
+                        || (kind == 5 && TryAssignAutonomousLabor(worker, "Kitchen", PlayerBotLaborKind.Cooker, true))) return;
                 }
             }
         }
@@ -689,7 +690,8 @@ namespace Server.CustomBots
                 if (bot != null && !bot.Deleted && bot.Alive && bot.Map == map
                     && bot.BankRole == PlayerBotBankRole.Hawker && bot.InRange(location, 4)
                     && ((laborKind == PlayerBotLaborKind.Blacksmith && PlayerBotShop.HasWorkshopOre(bot))
-                        || (laborKind == PlayerBotLaborKind.Carpenter && PlayerBotShop.HasWorkshopLogs(bot)))) return true;
+                        || (laborKind == PlayerBotLaborKind.Carpenter && PlayerBotShop.HasWorkshopLogs(bot))
+                        || (laborKind == PlayerBotLaborKind.Cooker && PlayerBotShop.HasWorkshopFish(bot)))) return true;
             return false;
         }
 
