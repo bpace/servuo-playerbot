@@ -40,6 +40,9 @@ namespace Server.CustomBots
         private static DateTime _nextDashboardRefresh = DateTime.MinValue;
         private static readonly TimeSpan BankHubReconcileInterval = TimeSpan.FromSeconds(20);
         private static DateTime _nextBankHubReconcile = DateTime.MinValue;
+        private static readonly TimeSpan AutonomousLaborReconcileInterval = TimeSpan.FromMinutes(3);
+        private static DateTime _nextAutonomousLaborReconcile = DateTime.MinValue;
+        private static readonly Dictionary<int, PlayerBotLaborKind> PendingAutonomousLabor = new Dictionary<int, PlayerBotLaborKind>();
         private const string BankHubPrefix = "BankHub:";
         private const int BankSitterLayoutVersion = 2;
         private const int TrammelBritainBankCrowd = 18;
@@ -468,6 +471,7 @@ namespace Server.CustomBots
             }
             PlayerBotGuilds.ReconcileAutonomousMembership();
             PlayerBotParties.ReconcileAutonomousParties();
+            ReconcileAutonomousLabor();
             foreach (var bot in FindBots()) Tick(bot);
         }
 
@@ -615,6 +619,53 @@ namespace Server.CustomBots
                 && String.IsNullOrEmpty(bot.DungeonTravelState);
         }
 
+        // Typed sites are opt-in world data. At most one low-frequency worker
+        // is assigned, only after the authored point passed native harvest
+        // validation and this specific bot has an audited route to it. The
+        // worker keeps its normal mobile and uses the existing Labor adapter
+        // on arrival; this scheduler never creates resources or moves a bot.
+        private static void ReconcileAutonomousLabor()
+        {
+            var now = DateTime.UtcNow;
+            if (now < _nextAutonomousLaborReconcile) return;
+            _nextAutonomousLaborReconcile = now + AutonomousLaborReconcileInterval;
+            if (Utility.RandomDouble() >= 0.25) return;
+
+            foreach (var worker in FindBots())
+            {
+                if (!IsEligibleForAutonomousLabor(worker)) continue;
+                if (TryAssignAutonomousLabor(worker, "MiningSpot", PlayerBotLaborKind.Miner)
+                    || TryAssignAutonomousLabor(worker, "LumberSpot", PlayerBotLaborKind.Lumberjack)
+                    || TryAssignAutonomousLabor(worker, "FishingSpot", PlayerBotLaborKind.Fisher)) return;
+            }
+        }
+
+        private static bool IsEligibleForAutonomousLabor(PlayerBot bot)
+        {
+            return IsEligibleForAutonomousParty(bot) && bot.Combatant == null
+                && Server.Engines.PartySystem.Party.Get(bot) == null && !PendingAutonomousLabor.ContainsKey(bot.Serial.Value);
+        }
+
+        private static bool TryAssignAutonomousLabor(PlayerBot worker, string siteKind, PlayerBotLaborKind laborKind)
+        {
+            var sites = PlayerBotWorldData.GetDestinations(worker.Map, siteKind);
+            if (sites.Count == 0) return false;
+            var site = sites[Utility.Random(sites.Count)];
+            foreach (var bot in FindBots())
+                if (bot != worker && bot.Map == worker.Map && String.Equals(bot.DestinationName, site.Name, StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+            if (!worker.InRange(new Point3D(site.X, site.Y, site.Z), 2)
+                && !PlayerBotWorldData.TryPlanRoute(worker, site)) return false;
+
+            worker.Destination = new Point3D(site.X, site.Y, site.Z);
+            worker.DestinationName = site.Name;
+            worker.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+            PendingAutonomousLabor[worker.Serial.Value] = laborKind;
+            RecordEvent(worker.Name + " is traveling to " + site.Name + " for a " + laborKind.ToString().ToLowerInvariant() + " shift.");
+            return true;
+        }
+
         // A real player may explicitly recruit an idle visitor at their side.
         // Unlike autonomous formation, this allows a short tavern visit, but
         // keeps permanent bank fixtures, active labor, recovery, dungeons,
@@ -674,6 +725,25 @@ namespace Server.CustomBots
                 AssignDestination(bot);
             }
             bot.NextAction = DateTime.UtcNow + MoveDelay();
+        }
+
+        internal static void ResumeTravelAfterLabor(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || bot.Map == null || bot.Map == Map.Internal) return;
+            PendingAutonomousLabor.Remove(bot.Serial.Value);
+            AssignDestination(bot);
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(Utility.RandomMinMax(2, 6));
+        }
+
+        private static bool TryStartAutonomousLabor(PlayerBot bot)
+        {
+            PlayerBotLaborKind kind;
+            if (bot == null || !PendingAutonomousLabor.TryGetValue(bot.Serial.Value, out kind)) return false;
+            PendingAutonomousLabor.Remove(bot.Serial.Value);
+            if (bot.Combatant != null || Server.Engines.PartySystem.Party.Get(bot) != null) return false;
+            if (!PlayerBotLabor.StartAutonomousShift(bot, kind)) return false;
+            RecordEvent(bot.Name + " started a " + kind.ToString().ToLowerInvariant() + " shift at " + bot.DestinationName + ".");
+            return true;
         }
 
         private static bool HasNearbyCreature(PlayerBot bot)
@@ -943,6 +1013,7 @@ namespace Server.CustomBots
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(350, 1800));
                 return;
             }
+            if (TryStartAutonomousLabor(bot)) return;
             if (TryStartDestinationVisit(bot)) return;
             if (IsGraveyardDestination(bot))
             {

@@ -14,10 +14,23 @@ namespace Server.CustomBots
     public static class PlayerBotLabor
     {
         private static readonly TimeSpan ShiftLength = TimeSpan.FromMinutes(10);
+        private static readonly HashSet<int> AutonomousWorkers = new HashSet<int>();
 
         public static bool IsActive(PlayerBot bot)
         {
             return bot != null && bot.LaborKind != PlayerBotLaborKind.None && DateTime.UtcNow < bot.LaborUntil;
+        }
+
+        internal static bool StartAutonomousShift(PlayerBot bot, PlayerBotLaborKind kind)
+        {
+            if (bot == null || bot.LaborKind != PlayerBotLaborKind.None || bot.LaborReturning) return false;
+            bot.LaborReturnName = "";
+            bot.LaborKind = kind;
+            bot.LaborUntil = DateTime.UtcNow + ShiftLength;
+            bot.NextLaborAction = DateTime.UtcNow;
+            AutonomousWorkers.Add(bot.Serial.Value);
+            Prepare(bot);
+            return true;
         }
 
         public static string StartNear(Mobile gm, string requestedKind)
@@ -51,10 +64,21 @@ namespace Server.CustomBots
                     bot.LaborUntil = DateTime.MinValue;
                     bot.NextLaborAction = DateTime.MinValue;
                     PlayerBotService.RecordEvent(bot.Name + " finished a labor shift.");
+                    PlayerBotService.ResumeTravelAfterLabor(bot);
                 }
                 return;
             }
             if (bot.Map == null || bot.Map == Map.Internal || !bot.Alive) return;
+            if (AutonomousWorkers.Contains(bot.Serial.Value) && !bot.InRange(bot.Destination, 0))
+            {
+                if (!bot.Move(bot.GetDirectionTo(bot.Destination) | Direction.Running))
+                {
+                    ClearLabor(bot);
+                    return;
+                }
+                bot.NextLaborAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(450, 850));
+                return;
+            }
             if (DateTime.UtcNow < bot.NextLaborAction) return;
 
             Prepare(bot);
@@ -514,6 +538,8 @@ namespace Server.CustomBots
             bot.NextLaborAction = DateTime.MinValue;
             bot.LaborReturning = false;
             bot.LaborReturnName = "";
+            AutonomousWorkers.Remove(bot.Serial.Value);
+            PlayerBotService.ResumeTravelAfterLabor(bot);
         }
 
         private static Item FindForge(PlayerBot bot)
