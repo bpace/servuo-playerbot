@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
+using Server.Engines.Craft;
 using Server.Engines.Harvest;
 using Server.Items;
 using Server.Regions;
@@ -201,7 +202,7 @@ namespace Server.CustomBots
                 message = "Point is outside " + map.Name + ".";
                 return false;
             }
-            if (!waypoint && !ValidateGatherSite(map, kind, x, y, z, out message)) return false;
+            if (!waypoint && !ValidateWorkSite(map, kind, x, y, z, out message)) return false;
             lock (Sync)
             {
                 if (waypoint)
@@ -230,15 +231,28 @@ namespace Server.CustomBots
             return true;
         }
 
-        // Gathering sites are authored stand points, not synthetic resource
-        // nodes. Verify a worker can stand here and that ServUO's live harvest
-        // definitions recognize a matching target in their ordinary range.
-        // Other destination kinds retain their existing generic authoring
-        // contract, while a bad resource site cannot later create a worker
-        // that repeatedly swings at terrain the shard rejects.
-        private static bool ValidateGatherSite(Map map, string kind, int x, int y, int z, out string message)
+        // Work sites are authored stand points, not synthetic resource nodes.
+        // Gather sites must match ServUO's harvest definitions; smithies must
+        // contain the same anvil and forge identifiers the native craft system
+        // accepts. Other destinations retain their generic authoring contract.
+        private static bool ValidateWorkSite(Map map, string kind, int x, int y, int z, out string message)
         {
             message = null;
+            if (String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsWalkable(map, x, y, z))
+                {
+                    message = "A smithy worker must be placed on a walkable tile.";
+                    return false;
+                }
+                if (!HasSmithy(map, x, y, z))
+                {
+                    message = "A smithy needs a native anvil and forge within two tiles.";
+                    return false;
+                }
+                return true;
+            }
+
             HarvestDefinition definition = null;
             var radius = 0;
             if (String.Equals(kind, "MiningSpot", StringComparison.OrdinalIgnoreCase))
@@ -277,6 +291,40 @@ namespace Server.CustomBots
             }
 
             message = "No matching native harvest target is within range of that gather site.";
+            return false;
+        }
+
+        private static bool HasSmithy(Map map, int x, int y, int z)
+        {
+            var anvil = false;
+            var forge = false;
+            IPooledEnumerable nearby = map.GetItemsInRange(new Point3D(x, y, z), 2);
+            try
+            {
+                foreach (Item item in nearby)
+                {
+                    if (item == null || item.Deleted || Math.Abs(item.Z - z) > 16) continue;
+                    var type = item.GetType();
+                    anvil = anvil || type.IsDefined(typeof(AnvilAttribute), false) || item.ItemID == 4015 || item.ItemID == 4016 || item.ItemID == 0x2DD5 || item.ItemID == 0x2DD6;
+                    forge = forge || type.IsDefined(typeof(ForgeAttribute), false) || item.ItemID == 4017 || (item.ItemID >= 6522 && item.ItemID <= 6569) || item.ItemID == 0x2DD8 || item.ItemID == 0xA531 || item.ItemID == 0xA535;
+                    if (anvil && forge) return true;
+                }
+            }
+            finally { nearby.Free(); }
+
+            for (var offsetX = -2; offsetX <= 2; offsetX++)
+            for (var offsetY = -2; offsetY <= 2; offsetY++)
+            {
+                var tiles = map.Tiles.GetStaticTiles(x + offsetX, y + offsetY, true);
+                for (var index = 0; index < tiles.Length; index++)
+                {
+                    var tile = tiles[index];
+                    if (Math.Abs(tile.Z - z) > 16) continue;
+                    anvil = anvil || tile.ID == 4015 || tile.ID == 4016 || tile.ID == 0x2DD5 || tile.ID == 0x2DD6;
+                    forge = forge || tile.ID == 4017 || (tile.ID >= 6522 && tile.ID <= 6569) || tile.ID == 0x2DD8;
+                    if (anvil && forge) return true;
+                }
+            }
             return false;
         }
 
