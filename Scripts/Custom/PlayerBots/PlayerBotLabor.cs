@@ -25,6 +25,7 @@ namespace Server.CustomBots
         {
             if (bot == null || bot.LaborKind != PlayerBotLaborKind.None || bot.LaborReturning) return false;
             if (kind == PlayerBotLaborKind.Blacksmith && !PlayerBotShop.TryWithdrawWorkshopOre(bot)) return false;
+            if (kind == PlayerBotLaborKind.Carpenter && !PlayerBotShop.TryWithdrawWorkshopLogs(bot)) return false;
             bot.LaborReturnName = "";
             bot.LaborKind = kind;
             bot.LaborUntil = DateTime.UtcNow + ShiftLength;

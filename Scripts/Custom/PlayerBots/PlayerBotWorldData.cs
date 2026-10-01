@@ -238,6 +238,15 @@ namespace Server.CustomBots
         private static bool ValidateWorkSite(Map map, string kind, int x, int y, int z, out string message)
         {
             message = null;
+            if (String.Equals(kind, "Carpentry", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsWalkable(map, x, y, z))
+                {
+                    message = "A carpenter worker must be placed on a walkable tile.";
+                    return false;
+                }
+                return true;
+            }
             if (String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase))
             {
                 if (!IsWalkable(map, x, y, z))
@@ -374,7 +383,8 @@ namespace Server.CustomBots
             return String.Equals(kind, "MiningSpot", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "LumberSpot", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "Carpentry", StringComparison.OrdinalIgnoreCase);
         }
 
         // The graph import is data-only.  This is the single seam callers use
