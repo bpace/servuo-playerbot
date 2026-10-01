@@ -82,6 +82,44 @@ namespace Server.CustomBots
             return stock;
         }
 
+        internal static bool HasWorkshopOre(PlayerBot hawker)
+        {
+            PlayerBotShopStockMarker marker;
+            return FindWorkshopOre(hawker, out marker) != null;
+        }
+
+        // The transfer is deliberately local. The harvester was already paid
+        // when its real stack reached this hawker; the smith only takes that
+        // marked stock when both bots stand together at an authored workshop.
+        internal static bool TryWithdrawWorkshopOre(PlayerBot smith)
+        {
+            if (smith == null || smith.Deleted || !smith.Alive || smith.Backpack == null || smith.Map == null) return false;
+            IPooledEnumerable nearby = smith.GetMobilesInRange(4);
+            try
+            {
+                foreach (Mobile mobile in nearby)
+                {
+                    var hawker = mobile as PlayerBot;
+                    if (hawker == null || hawker == smith || hawker.Deleted || !hawker.Alive
+                        || hawker.BankRole != PlayerBotBankRole.Hawker || hawker.Backpack == null) continue;
+
+                    PlayerBotShopStockMarker marker;
+                    var ore = FindWorkshopOre(hawker, out marker);
+                    if (ore == null || marker == null || !smith.Backpack.CheckHold(smith, ore, false, true)) continue;
+
+                    hawker.Backpack.RemoveItem(ore);
+                    smith.Backpack.DropItem(ore);
+                    marker.Delete();
+                    smith.Say("I'll put this ore to work.");
+                    hawker.Say("The workshop stock is yours.");
+                    PlayerBotService.RecordEvent(smith.Name + " withdrew " + ore.Amount + " ore from " + hawker.Name + " for smithing.");
+                    return true;
+                }
+            }
+            finally { nearby.Free(); }
+            return false;
+        }
+
         // ServUO's standard vendor lists sell daggers for 21 gold, wooden
         // shields for 30, fish for 6, and raw fish steaks for 3. Their
         // corresponding buyback values are 10, 15, 1, and 1. A hawker pays
@@ -164,6 +202,23 @@ namespace Server.CustomBots
         private static bool IsTradeGood(Item item)
         {
             return item is BaseOre || item is BaseLog || IsRetailLaborGood(item);
+        }
+
+        private static BaseOre FindWorkshopOre(PlayerBot hawker, out PlayerBotShopStockMarker result)
+        {
+            result = null;
+            if (hawker == null || hawker.Backpack == null) return null;
+            foreach (Item item in hawker.Backpack.Items)
+            {
+                var marker = item as PlayerBotShopStockMarker;
+                var ore = marker == null ? null : marker.Stock as BaseOre;
+                if (ore != null && !ore.Deleted && ore.Parent == hawker.Backpack)
+                {
+                    result = marker;
+                    return ore;
+                }
+            }
+            return null;
         }
 
         private static bool IsRetailLaborGood(Item item)
