@@ -200,9 +200,9 @@ namespace Server.CustomBots
             return false;
         }
 
-        // ServUO's standard vendor lists sell daggers for 21 gold, broadswords
-        // for 35, wooden shields for 30, fish for 6, and raw fish steaks for
-        // 3. Their corresponding buyback values are 10, 17, 15, 1, and 1. A hawker pays
+        // ServUO's standard vendor lists sell the supported blacksmith goods,
+        // wooden shields, fish, and raw fish steaks at the values below. Their
+        // corresponding buyback values remain the laborer's payment. A hawker pays
         // that existing buyback value for a laborer's real good and advertises
         // the same item at the standard sale value.
         public static bool TrySellLaborGoods(PlayerBot worker)
@@ -322,6 +322,7 @@ namespace Server.CustomBots
             if (stock is Cutlass) return stock.Amount * 24;
             if (stock is Scimitar) return stock.Amount * 36;
             if (stock is PlateGorget) return stock.Amount * 104;
+            if (stock is PlateGloves) return stock.Amount * 155;
             if (stock is WoodenShield) return stock.Amount * 30;
             if (stock is Fish) return stock.Amount * 6;
             if (stock is RawFishSteak) return stock.Amount * 3;
@@ -340,6 +341,7 @@ namespace Server.CustomBots
             if (stock is Cutlass) return "cutlasses";
             if (stock is Scimitar) return "scimitars";
             if (stock is PlateGorget) return "plate gorgets";
+            if (stock is PlateGloves) return "plate gloves";
             if (stock is WoodenShield) return "wooden shields";
             if (stock is Fish) return "fish";
             if (stock is RawFishSteak) return "raw fish steaks";
@@ -408,7 +410,7 @@ namespace Server.CustomBots
 
         private static bool IsRetailLaborGood(Item item)
         {
-            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is WoodenShield || item is Fish || item is RawFishSteak;
+            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is WoodenShield || item is Fish || item is RawFishSteak;
         }
 
         private static Item FindLaborGoods(PlayerBot worker)
@@ -427,7 +429,7 @@ namespace Server.CustomBots
             if (laborKind == PlayerBotLaborKind.Lumberjack) return item is BaseLog;
             if (laborKind == PlayerBotLaborKind.Fisher) return item is Fish;
             if (laborKind == PlayerBotLaborKind.Cooker) return item is Fish || item is RawFishSteak;
-            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget;
+            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves;
             if (laborKind == PlayerBotLaborKind.Carpenter) return item is WoodenShield;
             return false;
         }
@@ -439,6 +441,7 @@ namespace Server.CustomBots
             if (goods is Cutlass) return goods.Amount * 12;
             if (goods is Scimitar) return goods.Amount * 18;
             if (goods is PlateGorget) return goods.Amount * 52;
+            if (goods is PlateGloves) return goods.Amount * 72;
             if (goods is WoodenShield) return goods.Amount * 15;
             if (goods is Fish || goods is RawFishSteak) return goods.Amount;
             if (goods is BaseOre || goods is BaseLog) return goods.Amount;

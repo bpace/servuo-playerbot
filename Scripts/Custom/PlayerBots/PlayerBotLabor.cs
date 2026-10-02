@@ -308,7 +308,7 @@ namespace Server.CustomBots
         }
 
         // Keep the profile small and backed by the ordinary blacksmith vendor
-        // list. A smith chooses only native three-, eight-, or ten-ingot
+        // list. A smith chooses only native three-, eight-, ten-, or twelve-ingot
         // recipes from its actual iron stack. CraftItem retains all skill,
         // station, resource, and failure behavior.
         private static void TryCraftBlacksmithProduct(PlayerBot bot)
@@ -319,7 +319,13 @@ namespace Server.CustomBots
             var type = typeof(Dagger);
             if (ingots != null && !ingots.Deleted)
             {
-                if (ingots.Amount >= 10)
+                if (ingots.Amount >= 12)
+                {
+                    var choice = Utility.Random(5);
+                    type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
+                        : choice == 2 ? typeof(PlateGorget) : choice == 3 ? typeof(PlateGloves) : typeof(Dagger);
+                }
+                else if (ingots.Amount >= 10)
                 {
                     var choice = Utility.Random(4);
                     type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
@@ -519,7 +525,7 @@ namespace Server.CustomBots
             {
                 case PlayerBotLaborKind.Miner: return bot.Backpack.FindItemByType<BaseOre>() != null;
                 case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null;
-                case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || bot.Backpack.FindItemByType<Dagger>() != null || bot.Backpack.FindItemByType<Broadsword>() != null;
+                case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || HasBlacksmithGoods(bot.Backpack);
                 case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
                 case PlayerBotLaborKind.Fisher: return bot.Backpack.FindItemByType<Fish>() != null;
                 case PlayerBotLaborKind.Cooker: return bot.Backpack.FindItemByType<Fish>() != null || bot.Backpack.FindItemByType<RawFishSteak>() != null || bot.Backpack.FindItemByType<FishSteak>() != null;
@@ -535,7 +541,7 @@ namespace Server.CustomBots
             {
                 if ((bot.LaborKind == PlayerBotLaborKind.Miner && item is BaseOre)
                     || (bot.LaborKind == PlayerBotLaborKind.Lumberjack && item is BaseLog)
-                    || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || item is Dagger || item is Broadsword))
+                    || (bot.LaborKind == PlayerBotLaborKind.Blacksmith && (item is BaseIngot || IsBlacksmithGood(item)))
                     || (bot.LaborKind == PlayerBotLaborKind.Carpenter && (item is BaseWoodBoard || item is WoodenShield))
                     || (bot.LaborKind == PlayerBotLaborKind.Fisher && item is Fish)
                     || (bot.LaborKind == PlayerBotLaborKind.Cooker && (item is Fish || item is RawFishSteak || item is FishSteak)))
@@ -547,6 +553,21 @@ namespace Server.CustomBots
                 bot.BankBox.DropItem(item);
             }
             return goods.Count;
+        }
+
+        private static bool HasBlacksmithGoods(Container pack)
+        {
+            if (pack == null) return false;
+            foreach (Item item in pack.Items)
+            {
+                if (IsBlacksmithGood(item)) return true;
+            }
+            return false;
+        }
+
+        private static bool IsBlacksmithGood(Item item)
+        {
+            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves;
         }
 
         private static void ClearLabor(PlayerBot bot)
