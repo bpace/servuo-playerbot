@@ -135,6 +135,12 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public BaseCreature PackAnimal { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public BaseCreature TamedPet { get; set; }
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime TamedAt { get; set; }
+
         // A single persisted companion edge is deliberately small but gives
         // repeat tavern meetings a social memory across ordinary world saves.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -248,6 +254,8 @@ namespace Server.CustomBots
             LaborReturning = false;
             LaborReturnName = "";
             PackAnimal = null;
+            TamedPet = null;
+            TamedAt = DateTime.MinValue;
             PreferredCompanionSerial = 0;
             CorpseRecoverySerial = 0;
             CorpseRecoveryUntil = DateTime.MinValue;
@@ -303,7 +311,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(15);
+            writer.Write(16);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -345,6 +353,8 @@ namespace Server.CustomBots
             writer.Write(LaborReturnName);
             writer.Write(PreferredCompanionSerial);
             writer.Write(PackAnimal);
+            writer.Write(TamedPet);
+            writer.Write(TamedAt);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -396,6 +406,8 @@ namespace Server.CustomBots
             LaborReturnName = version >= 13 ? reader.ReadString() ?? "" : "";
             PreferredCompanionSerial = version >= 14 ? reader.ReadInt() : 0;
             PackAnimal = version >= 15 ? reader.ReadMobile() as BaseCreature : null;
+            TamedPet = version >= 16 ? reader.ReadMobile() as BaseCreature : null;
+            TamedAt = version >= 16 ? reader.ReadDateTime() : DateTime.MinValue;
             Player = false;
         }
     }
