@@ -265,6 +265,7 @@ namespace Server.CustomBots
         public override void OnDeath(Container c)
         {
             PlayerBotService.ReportMurder(this);
+            PlayerBotParties.LeavePlayerLedPartyOnDeath(this);
             base.OnDeath(c);
             PlayerBotService.TrackCorpseRecovery(this, c as Corpse);
         }

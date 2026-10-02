@@ -65,6 +65,20 @@ namespace Server.CustomBots
                 || PlayerLedLeaders.Contains(party.Leader.Serial.Value);
         }
 
+        // A player must explicitly invite a bot again after it dies. Keeping
+        // the native membership through resurrection would silently restore a
+        // player-led follower without that renewed consent.
+        internal static void LeavePlayerLedPartyOnDeath(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted) return;
+            var party = Party.Get(bot);
+            if (party == null || party.Leader == null || party.Leader is PlayerBot
+                || !PlayerLedLeaders.Contains(party.Leader.Serial.Value)) return;
+            PlayerLedSeparationSince.Remove(bot.Serial.Value);
+            party.Remove(bot);
+            if (party.Members.Count <= 1) PlayerLedLeaders.Remove(party.Leader.Serial.Value);
+        }
+
         // Player membership is never automatic: the player runs this command
         // and then completes ServUO's ordinary /accept invitation flow.
         public static string InvitePlayer(Mobile player)
