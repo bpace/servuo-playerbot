@@ -6,6 +6,15 @@ namespace Server.CustomBots
     // without ever touching a player's ordinary pack animal.
     public sealed class PlayerBotPackHorse : PackHorse
     {
+        [Constructable]
+        public PlayerBotPackHorse()
+        {
+        }
+
+        public PlayerBotPackHorse(Serial serial) : base(serial)
+        {
+        }
+
         public override void OnThink()
         {
             base.OnThink();
@@ -15,6 +24,15 @@ namespace Server.CustomBots
 
     public sealed class PlayerBotPackLlama : PackLlama
     {
+        [Constructable]
+        public PlayerBotPackLlama()
+        {
+        }
+
+        public PlayerBotPackLlama(Serial serial) : base(serial)
+        {
+        }
+
         public override void OnThink()
         {
             base.OnThink();
