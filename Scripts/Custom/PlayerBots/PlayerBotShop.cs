@@ -325,6 +325,7 @@ namespace Server.CustomBots
             if (stock is PlateGloves) return stock.Amount * 155;
             if (stock is PlateArms) return stock.Amount * 188;
             if (stock is PlateLegs) return stock.Amount * 218;
+            if (stock is PlateChest) return stock.Amount * 243;
             if (stock is WoodenShield) return stock.Amount * 30;
             if (stock is Fish) return stock.Amount * 6;
             if (stock is RawFishSteak) return stock.Amount * 3;
@@ -346,6 +347,7 @@ namespace Server.CustomBots
             if (stock is PlateGloves) return "plate gloves";
             if (stock is PlateArms) return "plate arms";
             if (stock is PlateLegs) return "plate legs";
+            if (stock is PlateChest) return "plate chests";
             if (stock is WoodenShield) return "wooden shields";
             if (stock is Fish) return "fish";
             if (stock is RawFishSteak) return "raw fish steaks";
@@ -414,7 +416,7 @@ namespace Server.CustomBots
 
         private static bool IsRetailLaborGood(Item item)
         {
-            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs || item is WoodenShield || item is Fish || item is RawFishSteak;
+            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs || item is PlateChest || item is WoodenShield || item is Fish || item is RawFishSteak;
         }
 
         private static Item FindLaborGoods(PlayerBot worker)
@@ -433,7 +435,7 @@ namespace Server.CustomBots
             if (laborKind == PlayerBotLaborKind.Lumberjack) return item is BaseLog;
             if (laborKind == PlayerBotLaborKind.Fisher) return item is Fish;
             if (laborKind == PlayerBotLaborKind.Cooker) return item is Fish || item is RawFishSteak;
-            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs;
+            if (laborKind == PlayerBotLaborKind.Blacksmith) return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs || item is PlateChest;
             if (laborKind == PlayerBotLaborKind.Carpenter) return item is WoodenShield;
             return false;
         }
@@ -448,6 +450,7 @@ namespace Server.CustomBots
             if (goods is PlateGloves) return goods.Amount * 72;
             if (goods is PlateArms) return goods.Amount * 94;
             if (goods is PlateLegs) return goods.Amount * 109;
+            if (goods is PlateChest) return goods.Amount * 121;
             if (goods is WoodenShield) return goods.Amount * 15;
             if (goods is Fish || goods is RawFishSteak) return goods.Amount;
             if (goods is BaseOre || goods is BaseLog) return goods.Amount;
