@@ -14,7 +14,11 @@ namespace Server.CustomBots
         private static readonly HashSet<int> PlayerLedLeaders = new HashSet<int>();
         private static readonly Dictionary<int, DateTime> PlayerLedSeparationSince = new Dictionary<int, DateTime>();
         private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
-        private static readonly TimeSpan PlayerLedSeparationLimit = TimeSpan.FromMinutes(2);
+        // UO Offline gives a player-led follower 90 seconds after it is more
+        // than 60 tiles behind before it gives up and returns to normal life.
+        // This has to cover same-facet stranding as well as facet changes.
+        private static readonly TimeSpan PlayerLedSeparationLimit = TimeSpan.FromSeconds(90);
+        private const int PlayerLedLostBeyond = 60;
         private static DateTime NextAutonomousReconcile = DateTime.MinValue;
         private static readonly TimeSpan AutonomousReconcileInterval = TimeSpan.FromSeconds(45);
 
@@ -226,7 +230,7 @@ namespace Server.CustomBots
             // follow a player across facets. Keep the native party intact for
             // a short grace period, then leave rather than pinning the bot to
             // an unreachable leader forever.
-            if (bot.Map != leader.Map)
+            if (bot.Map != leader.Map || !bot.InRange(leader.Location, PlayerLedLostBeyond))
             {
                 LeavePlayerPartyAfterSeparation(bot, party, leader);
                 return;
@@ -265,6 +269,7 @@ namespace Server.CustomBots
             }
 
             PlayerLedSeparationSince.Remove(bot.Serial.Value);
+            bot.Say("im lost, heading back");
             party.Remove(bot);
             if (party.Members.Count <= 1) PlayerLedLeaders.Remove(leader.Serial.Value);
             bot.NextAction = now + TimeSpan.FromSeconds(2);
