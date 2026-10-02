@@ -110,6 +110,8 @@ namespace Server.CustomBots
 
         private static void OnWorldLoad()
         {
+            var swept = PlayerBotPackAnimals.SweepStrays();
+            if (swept > 0) RecordEvent("Removed " + swept + " orphaned PlayerBot pack animal(s).");
             RestoreFacetLocations();
             Timer.DelayCall(TimeSpan.FromSeconds(10), ReconcilePopulation);
         }
