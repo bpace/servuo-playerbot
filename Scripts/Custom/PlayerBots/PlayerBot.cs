@@ -13,7 +13,8 @@ namespace Server.CustomBots
         Adventurer,
         Townie,
         PlayerKiller,
-        Thief
+        Thief,
+        Tamer
     }
 
     // Mirrors UO Offline's BankSitterBehavior roles. Bank crowd behavior is
@@ -214,6 +215,11 @@ namespace Server.CustomBots
                 Skills[SkillName.Stealing].Base = 75;
                 Skills[SkillName.Hiding].Base = 65;
             }
+            else if (role == PlayerBotRole.Tamer)
+            {
+                Skills[SkillName.AnimalTaming].Base = 100;
+                Skills[SkillName.AnimalLore].Base = 100;
+            }
             Hits = HitsMax;
             Stam = StamMax;
             Mana = ManaMax;
@@ -270,6 +276,7 @@ namespace Server.CustomBots
         {
             PlayerBotService.ReportMurder(this);
             PlayerBotParties.LeavePlayerLedPartyOnDeath(this);
+            PlayerBotTaming.ReleasePets(this);
             base.OnDeath(c);
             PlayerBotService.TrackCorpseRecovery(this, c as Corpse);
         }
@@ -278,6 +285,7 @@ namespace Server.CustomBots
         {
             if (PackAnimal != null && !PackAnimal.Deleted) PackAnimal.Delete();
             PackAnimal = null;
+            PlayerBotTaming.ReleasePets(this);
             base.OnAfterDelete();
         }
 
