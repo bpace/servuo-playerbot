@@ -308,7 +308,7 @@ namespace Server.CustomBots
         }
 
         // Keep the profile small and backed by the ordinary blacksmith vendor
-        // list. A smith chooses only native three-, eight-, ten-, twelve-, or eighteen-ingot
+        // list. A smith chooses only native three-, eight-, ten-, twelve-, eighteen-, or twenty-ingot
         // recipes from its actual iron stack. CraftItem retains all skill,
         // station, resource, and failure behavior.
         private static void TryCraftBlacksmithProduct(PlayerBot bot)
@@ -319,7 +319,14 @@ namespace Server.CustomBots
             var type = typeof(Dagger);
             if (ingots != null && !ingots.Deleted)
             {
-                if (ingots.Amount >= 18)
+                if (ingots.Amount >= 20)
+                {
+                    var choice = Utility.Random(7);
+                    type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
+                        : choice == 2 ? typeof(PlateGorget) : choice == 3 ? typeof(PlateGloves)
+                        : choice == 4 ? typeof(PlateArms) : choice == 5 ? typeof(PlateLegs) : typeof(Dagger);
+                }
+                else if (ingots.Amount >= 18)
                 {
                     var choice = Utility.Random(6);
                     type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
@@ -574,7 +581,7 @@ namespace Server.CustomBots
 
         private static bool IsBlacksmithGood(Item item)
         {
-            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms;
+            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs;
         }
 
         private static void ClearLabor(PlayerBot bot)
