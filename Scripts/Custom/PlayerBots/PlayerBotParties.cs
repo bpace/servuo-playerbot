@@ -216,6 +216,16 @@ namespace Server.CustomBots
         private static void TickPlayerLedParty(PlayerBot bot, Party party, Mobile leader)
         {
             if (leader == null || leader.Deleted || !PlayerLedLeaders.Contains(leader.Serial.Value)) return;
+            // A logged-out player has no world position to follow. End the
+            // native membership immediately rather than waiting for the
+            // stranded-member grace window.
+            if (leader.Map == null || leader.Map == Map.Internal)
+            {
+                PlayerLedSeparationSince.Remove(bot.Serial.Value);
+                party.Remove(bot);
+                if (party.Members.Count <= 1) PlayerLedLeaders.Remove(leader.Serial.Value);
+                return;
+            }
             // A real player's party is never rebuilt or silently resumed by
             // bots after that player's death. Leaving the native party here
             // prevents a headless follower from remaining tied to a corpse.
