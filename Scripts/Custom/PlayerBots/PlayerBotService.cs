@@ -306,7 +306,7 @@ namespace Server.CustomBots
         {
             var map = from == null || from.Map == null ? Map.Felucca : from.Map;
             var point = from == null ? RandomCity(map).Location : from.Location;
-            var bot = new PlayerBot(requestedRole ?? (PlayerBotRole)Utility.Random(4));
+            var bot = new PlayerBot(requestedRole ?? RandomWandererRole());
             bot.MoveToWorld(new Point3D(point.X + Utility.RandomMinMax(-3, 3), point.Y + Utility.RandomMinMax(-3, 3), point.Z), map);
             EnsureDestination(bot);
             return bot;
@@ -314,7 +314,14 @@ namespace Server.CustomBots
 
         private static PlayerBot SpawnAt(City city, Map map)
         {
-            return SpawnAt(city.Location, map, (PlayerBotRole)Utility.Random(4));
+            return SpawnAt(city.Location, map, RandomWandererRole());
+        }
+
+        private static PlayerBotRole RandomWandererRole()
+        {
+            // Tamers are a roaming population role, never a permanent bank
+            // fixture. Keep them sparse while their native lifecycle runs.
+            return Utility.Random(20) == 0 ? PlayerBotRole.Tamer : (PlayerBotRole)Utility.Random(4);
         }
 
         private static PlayerBot SpawnAt(Point3D location, Map map, PlayerBotRole role)
