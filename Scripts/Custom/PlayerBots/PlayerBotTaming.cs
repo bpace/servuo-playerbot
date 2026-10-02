@@ -11,6 +11,7 @@ namespace Server.CustomBots
     {
         private const int SearchRange = 12;
         private const int TameRange = 3;
+        private static readonly TimeSpan ReleaseAfter = TimeSpan.FromMinutes(14);
         private static readonly Dictionary<int, BaseCreature> PendingTargets = new Dictionary<int, BaseCreature>();
 
         internal static bool IsActive(PlayerBot bot)
@@ -22,6 +23,8 @@ namespace Server.CustomBots
 
         internal static void Tick(PlayerBot bot)
         {
+            if (HandleClaim(bot)) return;
+
             BaseCreature quarry;
             if (PendingTargets.TryGetValue(bot.Serial.Value, out quarry))
             {
@@ -60,9 +63,57 @@ namespace Server.CustomBots
             foreach (Mobile mobile in World.Mobiles.Values)
             {
                 var pet = mobile as BaseCreature;
-                if (pet != null && !pet.Deleted && pet.ControlMaster == bot) pets.Add(pet);
+                if (pet != null && !pet.Deleted && pet != bot.PackAnimal && pet.ControlMaster == bot) pets.Add(pet);
             }
-            foreach (BaseCreature pet in pets) pet.Delete();
+            foreach (BaseCreature pet in pets) Release(pet);
+            bot.TamedPet = null;
+            bot.TamedAt = DateTime.MinValue;
+        }
+
+        private static bool HandleClaim(PlayerBot bot)
+        {
+            var pet = bot.TamedPet;
+            if (pet == null || pet.Deleted || !pet.Alive || pet.ControlMaster != bot)
+            {
+                bot.TamedPet = FindControlledPet(bot);
+                if (bot.TamedPet != null) bot.TamedAt = DateTime.UtcNow;
+                else bot.TamedAt = DateTime.MinValue;
+                return false;
+            }
+
+            if (bot.TamedAt == DateTime.MinValue) bot.TamedAt = DateTime.UtcNow;
+            if (DateTime.UtcNow >= bot.TamedAt + ReleaseAfter)
+            {
+                Release(pet);
+                bot.TamedPet = null;
+                bot.TamedAt = DateTime.MinValue;
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                return true;
+            }
+
+            // The native control order keeps the pet following while ordinary
+            // Traveler movement provides UO Offline's visible parade phase.
+            PlayerBotService.TickTravelBehavior(bot);
+            return true;
+        }
+
+        private static BaseCreature FindControlledPet(PlayerBot bot)
+        {
+            foreach (Mobile mobile in World.Mobiles.Values)
+            {
+                var pet = mobile as BaseCreature;
+                if (pet != null && !pet.Deleted && pet != bot.PackAnimal && pet.ControlMaster == bot) return pet;
+            }
+
+            return null;
+        }
+
+        private static void Release(BaseCreature pet)
+        {
+            if (pet == null || pet.Deleted) return;
+            pet.ControlTarget = null;
+            pet.ControlOrder = OrderType.None;
+            pet.SetControlMaster(null);
         }
 
         private static BaseCreature FindQuarry(PlayerBot bot)
