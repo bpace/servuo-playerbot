@@ -34,6 +34,7 @@ namespace Server.CustomBots
             Register(new DestinationVisitorPlayerBotBehavior());
             Register(new PartyPlayerBotBehavior());
             Register(new CombatPlayerBotBehavior());
+            Register(new TamingPlayerBotBehavior());
             Register(new LaborPlayerBotBehavior());
             Register(new TravelPlayerBotBehavior());
         }
@@ -105,6 +106,13 @@ namespace Server.CustomBots
             public override int Priority { get { return 650; } }
             public override bool Handles(PlayerBot bot) { return bot != null && (bot.LaborKind != PlayerBotLaborKind.None || bot.LaborReturning); }
             public override void Tick(PlayerBot bot) { PlayerBotLabor.Tick(bot); }
+        }
+
+        private sealed class TamingPlayerBotBehavior : PlayerBotBehavior
+        {
+            public override int Priority { get { return 675; } }
+            public override bool Handles(PlayerBot bot) { return PlayerBotTaming.IsActive(bot); }
+            public override void Tick(PlayerBot bot) { PlayerBotTaming.Tick(bot); }
         }
 
         private sealed class TravelPlayerBotBehavior : PlayerBotBehavior

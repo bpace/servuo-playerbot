@@ -143,9 +143,11 @@ namespace Server.CustomBots
             if (action == "spawn")
             {
                 var count = e.Length > 1 ? Math.Max(1, Math.Min(100, e.GetInt32(1))) : 1;
+                var requestedRole = PlayerBotRole.Traveler;
+                var hasRequestedRole = e.Length > 2 && Enum.TryParse(e.GetString(2), true, out requestedRole);
                 for (var i = 0; i < count; i++)
                 {
-                    SpawnNear(e.Mobile);
+                    SpawnNear(e.Mobile, hasRequestedRole ? requestedRole : (PlayerBotRole?)null);
                 }
                 RecordEvent("GM spawned " + count + " bot(s).");
                 e.Mobile.SendMessage("Spawned {0} PlayerBot(s).", count);
@@ -298,11 +300,11 @@ namespace Server.CustomBots
             }
         }
 
-        private static PlayerBot SpawnNear(Mobile from)
+        private static PlayerBot SpawnNear(Mobile from, PlayerBotRole? requestedRole = null)
         {
             var map = from == null || from.Map == null ? Map.Felucca : from.Map;
             var point = from == null ? RandomCity(map).Location : from.Location;
-            var bot = new PlayerBot((PlayerBotRole)Utility.Random(4));
+            var bot = new PlayerBot(requestedRole ?? (PlayerBotRole)Utility.Random(4));
             bot.MoveToWorld(new Point3D(point.X + Utility.RandomMinMax(-3, 3), point.Y + Utility.RandomMinMax(-3, 3), point.Z), map);
             EnsureDestination(bot);
             return bot;
