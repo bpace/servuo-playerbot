@@ -319,7 +319,15 @@ namespace Server.CustomBots
             var type = typeof(Dagger);
             if (ingots != null && !ingots.Deleted)
             {
-                if (ingots.Amount >= 20)
+                if (ingots.Amount >= 25)
+                {
+                    var choice = Utility.Random(8);
+                    type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
+                        : choice == 2 ? typeof(PlateGorget) : choice == 3 ? typeof(PlateGloves)
+                        : choice == 4 ? typeof(PlateArms) : choice == 5 ? typeof(PlateLegs)
+                        : choice == 6 ? typeof(PlateChest) : typeof(Dagger);
+                }
+                else if (ingots.Amount >= 20)
                 {
                     var choice = Utility.Random(7);
                     type = choice == 0 ? typeof(Broadsword) : choice == 1 ? typeof(Scimitar)
@@ -581,7 +589,7 @@ namespace Server.CustomBots
 
         private static bool IsBlacksmithGood(Item item)
         {
-            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs;
+            return item is Dagger || item is Broadsword || item is Cutlass || item is Scimitar || item is PlateGorget || item is PlateGloves || item is PlateArms || item is PlateLegs || item is PlateChest;
         }
 
         private static void ClearLabor(PlayerBot bot)
