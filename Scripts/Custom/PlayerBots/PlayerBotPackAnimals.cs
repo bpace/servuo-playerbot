@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Server.Mobiles;
 
 namespace Server.CustomBots
@@ -68,6 +69,25 @@ namespace Server.CustomBots
             var animal = bot.PackAnimal;
             bot.PackAnimal = null;
             if (animal != null && !animal.Deleted) animal.Delete();
+        }
+
+        // World saves can preserve a creature after its owner reference was
+        // removed or manually edited. Keep only the dedicated animal that a
+        // live PlayerBot explicitly still owns; no ordinary player pet is in
+        // scope because the types are private to this system.
+        internal static int SweepStrays()
+        {
+            var strays = new List<BaseCreature>();
+            foreach (Mobile mobile in World.Mobiles.Values)
+            {
+                var animal = mobile as BaseCreature;
+                if (!(animal is PlayerBotPackHorse) && !(animal is PlayerBotPackLlama)) continue;
+                var bot = animal.ControlMaster as PlayerBot;
+                if (bot == null || bot.Deleted || bot.PackAnimal != animal) strays.Add(animal);
+            }
+
+            foreach (BaseCreature animal in strays) animal.Delete();
+            return strays.Count;
         }
     }
 }
