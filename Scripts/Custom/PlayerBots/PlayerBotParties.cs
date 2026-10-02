@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Server.Engines.PartySystem;
 using Server.Items;
+using Server.Mobiles;
 
 namespace Server.CustomBots
 {
@@ -274,6 +275,7 @@ namespace Server.CustomBots
                 var target = mate == null ? null : mate.Combatant as Mobile;
                 if (mate == null || mate == bot || mate.Deleted || !mate.Alive
                     || target == null || target.Deleted || !target.Alive || target.Map != bot.Map
+                    || !IsHostileToPlayerParty(target, party)
                     || !bot.InRange(target, 12) || !bot.CanBeHarmful(target, false)) continue;
                 var distance = bot.GetDistanceToSqrt(target);
                 if (distance >= closestDistance) continue;
@@ -281,6 +283,15 @@ namespace Server.CustomBots
                 closestDistance = distance;
             }
             return closest;
+        }
+
+        private static bool IsHostileToPlayerParty(Mobile target, Party party)
+        {
+            if (target == null || target.Deleted || !target.Alive || Party.Get(target) == party) return false;
+            var creature = target as BaseCreature;
+            if (creature != null)
+                return creature.ControlMaster == null || Party.Get(creature.ControlMaster) != party;
+            return target.Player && (target.Murderer || Party.Get(target.Combatant as Mobile) == party);
         }
 
         private static void LeavePlayerPartyAfterSeparation(PlayerBot bot, Party party, Mobile leader)
