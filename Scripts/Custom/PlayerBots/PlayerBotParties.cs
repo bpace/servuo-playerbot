@@ -236,9 +236,8 @@ namespace Server.CustomBots
                 return;
             }
             PlayerLedSeparationSince.Remove(bot.Serial.Value);
-            var target = leader.Combatant as Mobile;
-            if (target != null && !target.Deleted && target.Alive && target.Map == bot.Map
-                && bot.InRange(target, 12) && bot.CanBeHarmful(target, false))
+            var target = FindPlayerPartyCombatant(bot, party);
+            if (target != null)
             {
                 bot.Combatant = target;
                 bot.Warmode = true;
@@ -250,6 +249,28 @@ namespace Server.CustomBots
                 return;
             }
             FollowLeader(bot, leader);
+        }
+
+        // A player-led bot assists a nearby foe already engaged with any
+        // living party member, not just the leader.
+        private static Mobile FindPlayerPartyCombatant(PlayerBot bot, Party party)
+        {
+            if (bot == null || party == null) return null;
+            Mobile closest = null;
+            var closestDistance = Double.MaxValue;
+            foreach (var member in party.Members)
+            {
+                var mate = member.Mobile;
+                var target = mate == null ? null : mate.Combatant as Mobile;
+                if (mate == null || mate == bot || mate.Deleted || !mate.Alive
+                    || target == null || target.Deleted || !target.Alive || target.Map != bot.Map
+                    || !bot.InRange(target, 12) || !bot.CanBeHarmful(target, false)) continue;
+                var distance = bot.GetDistanceToSqrt(target);
+                if (distance >= closestDistance) continue;
+                closest = target;
+                closestDistance = distance;
+            }
+            return closest;
         }
 
         private static void LeavePlayerPartyAfterSeparation(PlayerBot bot, Party party, Mobile leader)
