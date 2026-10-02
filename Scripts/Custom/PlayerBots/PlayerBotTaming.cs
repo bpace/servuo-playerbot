@@ -76,8 +76,13 @@ namespace Server.CustomBots
             if (pet == null || pet.Deleted || !pet.Alive || pet.ControlMaster != bot)
             {
                 bot.TamedPet = FindControlledPet(bot);
-                if (bot.TamedPet != null) bot.TamedAt = DateTime.UtcNow;
-                else bot.TamedAt = DateTime.MinValue;
+                if (bot.TamedPet != null)
+                {
+                    bot.TamedAt = DateTime.UtcNow;
+                    PlayerBotService.TickTravelBehavior(bot);
+                    return true;
+                }
+                bot.TamedAt = DateTime.MinValue;
                 return false;
             }
 
