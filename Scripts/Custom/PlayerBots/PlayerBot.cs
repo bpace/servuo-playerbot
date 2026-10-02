@@ -131,6 +131,9 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public string LaborReturnName { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public BaseCreature PackAnimal { get; set; }
+
         // A single persisted companion edge is deliberately small but gives
         // repeat tavern meetings a social memory across ordinary world saves.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -238,6 +241,7 @@ namespace Server.CustomBots
             NextLaborAction = DateTime.MinValue;
             LaborReturning = false;
             LaborReturnName = "";
+            PackAnimal = null;
             PreferredCompanionSerial = 0;
             CorpseRecoverySerial = 0;
             CorpseRecoveryUntil = DateTime.MinValue;
@@ -270,6 +274,13 @@ namespace Server.CustomBots
             PlayerBotService.TrackCorpseRecovery(this, c as Corpse);
         }
 
+        public override void OnAfterDelete()
+        {
+            if (PackAnimal != null && !PackAnimal.Deleted) PackAnimal.Delete();
+            PackAnimal = null;
+            base.OnAfterDelete();
+        }
+
         public override bool HandlesOnSpeech(Mobile from)
         {
             return base.HandlesOnSpeech(from) || BankRole == PlayerBotBankRole.Hawker;
@@ -284,7 +295,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(14);
+            writer.Write(15);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -325,6 +336,7 @@ namespace Server.CustomBots
             writer.Write(LaborReturning);
             writer.Write(LaborReturnName);
             writer.Write(PreferredCompanionSerial);
+            writer.Write(PackAnimal);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -375,6 +387,7 @@ namespace Server.CustomBots
             LaborReturning = version >= 13 && reader.ReadBool();
             LaborReturnName = version >= 13 ? reader.ReadString() ?? "" : "";
             PreferredCompanionSerial = version >= 14 ? reader.ReadInt() : 0;
+            PackAnimal = version >= 15 ? reader.ReadMobile() as BaseCreature : null;
             Player = false;
         }
     }
