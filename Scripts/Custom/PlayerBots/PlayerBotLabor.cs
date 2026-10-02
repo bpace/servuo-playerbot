@@ -139,10 +139,12 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Miner:
                     bot.Skills[SkillName.Mining].Base = Math.Max(bot.Skills[SkillName.Mining].Base, 75.0);
                     FindOrCreatePickaxe(bot);
+                    PlayerBotPackAnimals.SpawnFor(bot, true);
                     break;
                 case PlayerBotLaborKind.Lumberjack:
                     bot.Skills[SkillName.Lumberjacking].Base = Math.Max(bot.Skills[SkillName.Lumberjacking].Base, 75.0);
                     FindOrCreateHatchet(bot);
+                    PlayerBotPackAnimals.SpawnFor(bot, false);
                     break;
                 case PlayerBotLaborKind.Blacksmith:
                     bot.Skills[SkillName.Blacksmith].Base = Math.Max(bot.Skills[SkillName.Blacksmith].Base, 75.0);
@@ -595,6 +597,7 @@ namespace Server.CustomBots
         private static void ClearLabor(PlayerBot bot)
         {
             if (bot == null) return;
+            PlayerBotPackAnimals.Release(bot);
             bot.LaborKind = PlayerBotLaborKind.None;
             bot.LaborUntil = DateTime.MinValue;
             bot.NextLaborAction = DateTime.MinValue;
