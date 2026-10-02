@@ -12,7 +12,9 @@ namespace Server.CustomBots
         private const int SearchRange = 12;
         private const int TameRange = 3;
         private static readonly TimeSpan ReleaseAfter = TimeSpan.FromMinutes(14);
+        private static readonly TimeSpan SaleAfter = TimeSpan.FromMinutes(6);
         private static readonly Dictionary<int, BaseCreature> PendingTargets = new Dictionary<int, BaseCreature>();
+        private static readonly HashSet<int> SaleAttemptedPets = new HashSet<int>();
 
         internal static bool IsActive(PlayerBot bot)
         {
@@ -87,6 +89,20 @@ namespace Server.CustomBots
             }
 
             if (bot.TamedAt == DateTime.MinValue) bot.TamedAt = DateTime.UtcNow;
+            if (DateTime.UtcNow >= bot.TamedAt + SaleAfter && SaleAttemptedPets.Add(pet.Serial.Value))
+            {
+                var buyer = FindBuyer(bot);
+                if (buyer != null && pet.SetControlMaster(buyer))
+                {
+                    pet.ControlTarget = buyer;
+                    pet.ControlOrder = OrderType.Follow;
+                    bot.TamedPet = null;
+                    bot.TamedAt = DateTime.MinValue;
+                    bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                    bot.Say("A good home for you.");
+                    return true;
+                }
+            }
             if (DateTime.UtcNow >= bot.TamedAt + ReleaseAfter)
             {
                 Release(pet);
@@ -110,6 +126,18 @@ namespace Server.CustomBots
                 if (pet != null && !pet.Deleted && pet != bot.PackAnimal && pet.ControlMaster == bot) return pet;
             }
 
+            return null;
+        }
+
+        private static PlayerBot FindBuyer(PlayerBot seller)
+        {
+            foreach (Mobile mobile in seller.GetMobilesInRange(14))
+            {
+                var buyer = mobile as PlayerBot;
+                if (buyer != null && buyer != seller && !buyer.Deleted && buyer.Alive
+                    && buyer.Combatant == null && buyer.LaborKind == PlayerBotLaborKind.None
+                    && !buyer.LaborReturning && buyer.TamedPet == null) return buyer;
+            }
             return null;
         }
 
