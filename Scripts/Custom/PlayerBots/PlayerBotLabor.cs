@@ -85,6 +85,7 @@ namespace Server.CustomBots
             if (DateTime.UtcNow < bot.NextLaborAction) return;
 
             Prepare(bot);
+            MoveGatheredGoodsToPackAnimal(bot);
             switch (bot.LaborKind)
             {
                 case PlayerBotLaborKind.Miner:
@@ -506,6 +507,7 @@ namespace Server.CustomBots
             }
             if (bot.InRange(bot.Destination, 2))
             {
+                MovePackAnimalGoodsToBot(bot);
                 if (FindBanker(bot) != null && PlayerBotShop.TrySellLaborGoods(bot))
                 {
                     PlayerBotService.RecordEvent(bot.Name + " delivered a labor good to a bank hawker at " + bot.LaborReturnName + ".");
@@ -547,13 +549,44 @@ namespace Server.CustomBots
             if (bot == null || bot.Backpack == null) return false;
             switch (bot.LaborKind)
             {
-                case PlayerBotLaborKind.Miner: return bot.Backpack.FindItemByType<BaseOre>() != null;
-                case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null;
+                case PlayerBotLaborKind.Miner: return bot.Backpack.FindItemByType<BaseOre>() != null || HasPackAnimalGoods(bot, typeof(BaseOre));
+                case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null || HasPackAnimalGoods(bot, typeof(BaseLog));
                 case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || HasBlacksmithGoods(bot.Backpack);
                 case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
                 case PlayerBotLaborKind.Fisher: return bot.Backpack.FindItemByType<Fish>() != null;
                 case PlayerBotLaborKind.Cooker: return bot.Backpack.FindItemByType<Fish>() != null || bot.Backpack.FindItemByType<RawFishSteak>() != null || bot.Backpack.FindItemByType<FishSteak>() != null;
                 default: return false;
+            }
+        }
+
+        private static bool HasPackAnimalGoods(PlayerBot bot, Type type)
+        {
+            return bot != null && bot.PackAnimal != null && !bot.PackAnimal.Deleted && bot.PackAnimal.Backpack != null
+                && bot.PackAnimal.Backpack.FindItemByType(type) != null;
+        }
+
+        private static void MoveGatheredGoodsToPackAnimal(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null || bot.PackAnimal == null || bot.PackAnimal.Deleted || bot.PackAnimal.Backpack == null) return;
+            Item goods = bot.LaborKind == PlayerBotLaborKind.Miner ? (Item)bot.Backpack.FindItemByType<BaseOre>()
+                : bot.LaborKind == PlayerBotLaborKind.Lumberjack ? (Item)bot.Backpack.FindItemByType<BaseLog>() : null;
+            if (goods == null || goods.Deleted || !bot.PackAnimal.Backpack.CheckHold(bot, goods, false, true)) return;
+            bot.Backpack.RemoveItem(goods);
+            bot.PackAnimal.Backpack.DropItem(goods);
+        }
+
+        private static void MovePackAnimalGoodsToBot(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null || bot.PackAnimal == null || bot.PackAnimal.Deleted || bot.PackAnimal.Backpack == null) return;
+            var goods = new List<Item>(bot.PackAnimal.Backpack.Items);
+            foreach (var item in goods)
+            {
+                if ((bot.LaborKind == PlayerBotLaborKind.Miner && item is BaseOre)
+                    || (bot.LaborKind == PlayerBotLaborKind.Lumberjack && item is BaseLog))
+                {
+                    bot.PackAnimal.Backpack.RemoveItem(item);
+                    bot.Backpack.DropItem(item);
+                }
             }
         }
 
