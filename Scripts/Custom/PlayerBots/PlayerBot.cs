@@ -241,6 +241,8 @@ namespace Server.CustomBots
                 Skills[SkillName.Cartography].Base = 100;
                 Skills[SkillName.Mining].Base = 100;
                 Skills[SkillName.Lockpicking].Base = 100;
+                Skills[SkillName.DetectHidden].Base = 100;
+                Skills[SkillName.RemoveTrap].Base = 100;
                 AddToBackpack(new Pickaxe());
                 AddToBackpack(new Lockpick(20));
             }

@@ -168,6 +168,13 @@ namespace Server.CustomBots
                 return;
             }
 
+            if (chest.TrapType != TrapType.None)
+            {
+                if (bot.UseSkill(SkillName.RemoveTrap) && bot.Target != null) bot.Target.Invoke(bot, chest);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(12);
+                return;
+            }
+
             // Opening remains ServUO's own access gate. Item lifting and
             // subsequent guardian spawns stay entirely under the chest.
             chest.OnDoubleClick(bot);
