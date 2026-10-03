@@ -240,6 +240,13 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage(message);
                 return;
             }
+            if (action == "treasure")
+            {
+                var message = StartTreasureHunt(e.Mobile);
+                RecordEvent(message);
+                e.Mobile.SendMessage(message);
+                return;
+            }
             if (action == "party")
             {
                 var message = PlayerBotParties.FormNear(e.Mobile, e.Length > 1 ? e.GetInt32(1) : 3);
@@ -262,7 +269,24 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+        }
+
+        private static string StartTreasureHunt(Mobile from)
+        {
+            var map = from == null || from.Backpack == null ? null : from.Backpack.FindItemByType<TreasureMap>();
+            if (map == null || map.Deleted) return "Place one real, unfinished TreasureMap in your backpack before using [PlayerBots treasure].";
+            if (map.Completed) return "That TreasureMap has already been completed.";
+            if (from.Map == null || from.Map == Map.Internal || map.Facet != from.Map)
+                return "Stand on the TreasureMap's native facet before starting a treasure hunter.";
+
+            var bot = SpawnNear(from, PlayerBotRole.TreasureHunter);
+            if (!PlayerBotTreasureHunts.Assign(bot, map))
+            {
+                bot.Delete();
+                return "Could not transfer that TreasureMap to a PlayerBot hunter.";
+            }
+            return bot.Name + " is carrying your real TreasureMap and will use ServUO's native decode and dig flow.";
         }
 
         private static void OnJoinBotPartyCommand(CommandEventArgs e)

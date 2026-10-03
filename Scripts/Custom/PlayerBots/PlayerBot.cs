@@ -14,7 +14,8 @@ namespace Server.CustomBots
         Townie,
         PlayerKiller,
         Thief,
-        Tamer
+        Tamer,
+        TreasureHunter
     }
 
     // Mirrors UO Offline's BankSitterBehavior roles. Bank crowd behavior is
@@ -141,6 +142,12 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public DateTime TamedAt { get; set; }
 
+        // The map is always a real TreasureMap item in this bot's backpack.
+        // Keeping the reference lets an interrupted native dig resume after a
+        // world save without inventing a chest, location, or reward.
+        [CommandProperty(AccessLevel.GameMaster)]
+        public TreasureMap HuntMap { get; set; }
+
         // A single persisted companion edge is deliberately small but gives
         // repeat tavern meetings a social memory across ordinary world saves.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -226,6 +233,12 @@ namespace Server.CustomBots
                 Skills[SkillName.AnimalTaming].Base = 100;
                 Skills[SkillName.AnimalLore].Base = 100;
             }
+            else if (role == PlayerBotRole.TreasureHunter)
+            {
+                Skills[SkillName.Cartography].Base = 100;
+                Skills[SkillName.Mining].Base = 100;
+                AddToBackpack(new Pickaxe());
+            }
             Hits = HitsMax;
             Stam = StamMax;
             Mana = ManaMax;
@@ -256,6 +269,7 @@ namespace Server.CustomBots
             PackAnimal = null;
             TamedPet = null;
             TamedAt = DateTime.MinValue;
+            HuntMap = null;
             PreferredCompanionSerial = 0;
             CorpseRecoverySerial = 0;
             CorpseRecoveryUntil = DateTime.MinValue;
@@ -311,7 +325,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(16);
+            writer.Write(17);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -355,6 +369,7 @@ namespace Server.CustomBots
             writer.Write(PackAnimal);
             writer.Write(TamedPet);
             writer.Write(TamedAt);
+            writer.Write(HuntMap);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -408,6 +423,7 @@ namespace Server.CustomBots
             PackAnimal = version >= 15 ? reader.ReadMobile() as BaseCreature : null;
             TamedPet = version >= 16 ? reader.ReadMobile() as BaseCreature : null;
             TamedAt = version >= 16 ? reader.ReadDateTime() : DateTime.MinValue;
+            HuntMap = version >= 17 ? reader.ReadItem() as TreasureMap : null;
             Player = false;
         }
     }
