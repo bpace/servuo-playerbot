@@ -134,7 +134,7 @@ namespace Server.CustomBots
             foreach (Mobile mobile in seller.GetMobilesInRange(14))
             {
                 var buyer = mobile as PlayerBot;
-                if (buyer != null && buyer != seller && !buyer.Deleted && buyer.Alive
+                if (buyer != null && buyer != seller && buyer.BotRole == PlayerBotRole.Tamer && !buyer.Deleted && buyer.Alive
                     && buyer.Combatant == null && buyer.LaborKind == PlayerBotLaborKind.None
                     && !buyer.LaborReturning && buyer.TamedPet == null) return buyer;
             }
