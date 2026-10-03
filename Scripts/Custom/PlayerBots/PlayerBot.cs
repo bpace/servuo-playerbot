@@ -148,6 +148,9 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public TreasureMap HuntMap { get; set; }
 
+        [CommandProperty(AccessLevel.GameMaster)]
+        public TreasureMapChest HuntChest { get; set; }
+
         // A single persisted companion edge is deliberately small but gives
         // repeat tavern meetings a social memory across ordinary world saves.
         [CommandProperty(AccessLevel.GameMaster)]
@@ -237,7 +240,9 @@ namespace Server.CustomBots
             {
                 Skills[SkillName.Cartography].Base = 100;
                 Skills[SkillName.Mining].Base = 100;
+                Skills[SkillName.Lockpicking].Base = 100;
                 AddToBackpack(new Pickaxe());
+                AddToBackpack(new Lockpick(20));
             }
             Hits = HitsMax;
             Stam = StamMax;
@@ -270,6 +275,7 @@ namespace Server.CustomBots
             TamedPet = null;
             TamedAt = DateTime.MinValue;
             HuntMap = null;
+            HuntChest = null;
             PreferredCompanionSerial = 0;
             CorpseRecoverySerial = 0;
             CorpseRecoveryUntil = DateTime.MinValue;
@@ -325,7 +331,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(17);
+            writer.Write(18);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -370,6 +376,7 @@ namespace Server.CustomBots
             writer.Write(TamedPet);
             writer.Write(TamedAt);
             writer.Write(HuntMap);
+            writer.Write(HuntChest);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -424,6 +431,7 @@ namespace Server.CustomBots
             TamedPet = version >= 16 ? reader.ReadMobile() as BaseCreature : null;
             TamedAt = version >= 16 ? reader.ReadDateTime() : DateTime.MinValue;
             HuntMap = version >= 17 ? reader.ReadItem() as TreasureMap : null;
+            HuntChest = version >= 18 ? reader.ReadItem() as TreasureMapChest : null;
             Player = false;
         }
     }
