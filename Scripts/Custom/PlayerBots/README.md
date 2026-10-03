@@ -6,6 +6,10 @@ The system adds persistent headless `PlayerMobile` characters. They roam between
 
 Use `[PlayerBots status`, `[PlayerBots spawn 5`, `[PlayerBots population 50`, `[PlayerBots on`, `[PlayerBots off`, and `[PlayerBots remove` as a GameMaster. Start with `[PlayerBots population 10`, then `[PlayerBots on` on the AoS shard and inspect CPU, save time, pathing, banks, and murder reporting before increasing it.
 
+## Native treasure hunts
+
+Put one unfinished, real `TreasureMap` in a GM backpack while standing on that map's facet, then run `[PlayerBots treasure`. The command transfers that exact map to a nearby `TreasureHunter` PlayerBot, which has Cartography, Mining, and a pickaxe. It asks ServUO to decode and dig the map, so ServUO still creates the chest, guardians, and rewards. The bot persists the exact map reference across saves. This first slice does not fabricate maps, dig sites, chests, guardians, or loot.
+
 ## Local dashboard
 
 The mod also provides a LAN dashboard with no browser token, URL secret, cookie, or browser storage. On first startup it creates `Config/PlayerBotsDashboard.cfg`; its `BindAddress`, `Port`, and `AllowedAddress` determine access. Defaults are `192.168.50.139`, port `8081`, and the shard owner's LAN address `192.168.50.81`. Open `http://192.168.50.139:8081/` from that allowed device.
