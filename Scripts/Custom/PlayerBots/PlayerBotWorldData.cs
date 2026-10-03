@@ -275,6 +275,20 @@ namespace Server.CustomBots
                 }
                 return true;
             }
+            if (String.Equals(kind, "TreasureSite", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsWalkable(map, x, y, z))
+                {
+                    message = "A treasure hunter must be placed on a walkable tile.";
+                    return false;
+                }
+                if (Region.Find(new Point3D(x, y, z), map).GetRegion(typeof(GuardedRegion)) != null)
+                {
+                    message = "A treasure site cannot be inside a guarded region.";
+                    return false;
+                }
+                return true;
+            }
 
             HarvestDefinition definition = null;
             var radius = 0;
@@ -438,7 +452,8 @@ namespace Server.CustomBots
                 || String.Equals(kind, "FishingSpot", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Smithy", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(kind, "Carpentry", StringComparison.OrdinalIgnoreCase)
-                || String.Equals(kind, "Kitchen", StringComparison.OrdinalIgnoreCase);
+                || String.Equals(kind, "Kitchen", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(kind, "TreasureSite", StringComparison.OrdinalIgnoreCase);
         }
 
         // The graph import is data-only.  This is the single seam callers use
