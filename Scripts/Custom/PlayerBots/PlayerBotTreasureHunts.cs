@@ -19,9 +19,15 @@ namespace Server.CustomBots
         internal static void Tick(PlayerBot bot)
         {
             var map = bot.HuntMap;
-            if (!IsUsable(bot, map))
+            if (map == null || map.Deleted || bot.Backpack == null || map.RootParent != bot)
             {
-                Clear(bot, map != null && map.Completed ? "completed a native treasure map" : "lost its treasure map");
+                Clear(bot, "lost its treasure map");
+                return;
+            }
+
+            if (map.Completed)
+            {
+                TickChest(bot, map);
                 return;
             }
 
@@ -81,17 +87,13 @@ namespace Server.CustomBots
             }
             if (map.RootParent != bot) return false;
             bot.HuntMap = map;
+            bot.HuntChest = null;
             bot.Destination = Point3D.Zero;
             bot.DestinationName = "";
             if (bot.RoutePoints != null) bot.RoutePoints.Clear();
             bot.RouteIndex = 0;
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(1);
             return true;
-        }
-
-        private static bool IsUsable(PlayerBot bot, TreasureMap map)
-        {
-            return map != null && !map.Deleted && !map.Completed && bot.Backpack != null && map.RootParent == bot;
         }
 
         private static void MoveToDigRange(PlayerBot bot, Point3D chest)
@@ -117,12 +119,78 @@ namespace Server.CustomBots
         private static void Clear(PlayerBot bot, string outcome)
         {
             bot.HuntMap = null;
+            bot.HuntChest = null;
             bot.Destination = Point3D.Zero;
             bot.DestinationName = "";
             if (bot.RoutePoints != null) bot.RoutePoints.Clear();
             bot.RouteIndex = 0;
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(5);
             PlayerBotService.RecordEvent(bot.Name + " " + outcome + ".");
+        }
+
+        private static void TickChest(PlayerBot bot, TreasureMap map)
+        {
+            var chest = bot.HuntChest;
+            if (chest == null || chest.Deleted || chest.TreasureMap != map)
+            {
+                chest = FindChest(map);
+                bot.HuntChest = chest;
+            }
+            if (chest == null)
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                return;
+            }
+
+            if (HasLivingGuardians(chest))
+            {
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+                return;
+            }
+
+            if (!bot.InRange(chest.GetWorldLocation(), 1))
+            {
+                bot.Destination = chest.GetWorldLocation();
+                bot.DestinationName = "Treasure chest";
+                if (bot.RoutePoints != null) bot.RoutePoints.Clear();
+                bot.RouteIndex = 0;
+                PlayerBotService.TickTravelBehavior(bot);
+                return;
+            }
+
+            if (chest.Locked)
+            {
+                var pick = bot.Backpack.FindItemByType<Lockpick>();
+                if (pick == null || pick.Deleted) { bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(20); return; }
+                pick.OnDoubleClick(bot);
+                if (bot.Target != null) bot.Target.Invoke(bot, chest);
+                bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+                return;
+            }
+
+            // Opening remains ServUO's own access gate. Item lifting and
+            // subsequent guardian spawns stay entirely under the chest.
+            chest.OnDoubleClick(bot);
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        }
+
+        private static TreasureMapChest FindChest(TreasureMap map)
+        {
+            foreach (Item item in World.Items.Values)
+            {
+                var chest = item as TreasureMapChest;
+                if (chest != null && !chest.Deleted && chest.TreasureMap == map) return chest;
+            }
+            return null;
+        }
+
+        private static bool HasLivingGuardians(TreasureMapChest chest)
+        {
+            foreach (Mobile guardian in chest.Guardians)
+                if (guardian != null && !guardian.Deleted && guardian.Alive) return true;
+            foreach (Mobile guardian in chest.AncientGuardians)
+                if (guardian != null && !guardian.Deleted && guardian.Alive) return true;
+            return false;
         }
     }
 }
