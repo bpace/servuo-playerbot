@@ -1,5 +1,6 @@
 using System;
 using Server.Items;
+using Server.Network;
 
 namespace Server.CustomBots
 {
@@ -178,7 +179,8 @@ namespace Server.CustomBots
             // Opening remains ServUO's own access gate. Item lifting and
             // subsequent guardian spawns stay entirely under the chest.
             chest.OnDoubleClick(bot);
-            bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            TryLootOne(bot, chest);
+            bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(3);
         }
 
         private static TreasureMapChest FindChest(TreasureMap map)
@@ -198,6 +200,16 @@ namespace Server.CustomBots
             foreach (Mobile guardian in chest.AncientGuardians)
                 if (guardian != null && !guardian.Deleted && guardian.Alive) return true;
             return false;
+        }
+
+        private static void TryLootOne(PlayerBot bot, TreasureMapChest chest)
+        {
+            if (bot.Backpack == null || chest.Items.Count == 0) return;
+            var item = chest.Items[0];
+            LRReason reject = LRReason.CannotLift;
+            if (item == null || item.Deleted || !chest.CheckLift(bot, item, ref reject)) return;
+            chest.OnItemLifted(bot, item);
+            bot.Backpack.TryDropItem(bot, item, false);
         }
     }
 }
