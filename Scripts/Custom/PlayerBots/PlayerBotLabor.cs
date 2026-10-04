@@ -508,6 +508,8 @@ namespace Server.CustomBots
             if (bot.InRange(bot.Destination, 2))
             {
                 MovePackAnimalGoodsToBot(bot);
+                if (FindBanker(bot) != null && PlayerBotTreasureHunts.TrySellFishingMap(bot))
+                    PlayerBotService.RecordEvent(bot.Name + " sold a native treasure map at " + bot.LaborReturnName + ".");
                 if (FindBanker(bot) != null && PlayerBotShop.TrySellLaborGoods(bot))
                 {
                     PlayerBotService.RecordEvent(bot.Name + " delivered a labor good to a bank hawker at " + bot.LaborReturnName + ".");
@@ -553,7 +555,9 @@ namespace Server.CustomBots
                 case PlayerBotLaborKind.Lumberjack: return bot.Backpack.FindItemByType<BaseLog>() != null || HasPackAnimalGoods(bot, typeof(BaseLog));
                 case PlayerBotLaborKind.Blacksmith: return bot.Backpack.FindItemByType<BaseIngot>() != null || HasBlacksmithGoods(bot.Backpack);
                 case PlayerBotLaborKind.Carpenter: return bot.Backpack.FindItemByType<BaseWoodBoard>() != null || bot.Backpack.FindItemByType<WoodenShield>() != null;
-                case PlayerBotLaborKind.Fisher: return bot.Backpack.FindItemByType<Fish>() != null;
+                case PlayerBotLaborKind.Fisher:
+                    var map = bot.Backpack.FindItemByType<TreasureMap>();
+                    return bot.Backpack.FindItemByType<Fish>() != null || (map != null && !map.Deleted && !map.Completed);
                 case PlayerBotLaborKind.Cooker: return bot.Backpack.FindItemByType<Fish>() != null || bot.Backpack.FindItemByType<RawFishSteak>() != null || bot.Backpack.FindItemByType<FishSteak>() != null;
                 default: return false;
             }

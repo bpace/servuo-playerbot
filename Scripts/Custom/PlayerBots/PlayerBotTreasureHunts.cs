@@ -36,6 +36,24 @@ namespace Server.CustomBots
             }
         }
 
+        // A Fisher reaches an already-authored, route-verified bank through
+        // the normal labor return. Resolve its map sale there immediately so
+        // the short return tick cannot discard the seller state first.
+        internal static bool TrySellFishingMap(PlayerBot fisher)
+        {
+            if (fisher == null || fisher.Deleted || !fisher.Alive || fisher.Backpack == null
+                || fisher.LaborKind != PlayerBotLaborKind.Fisher) return false;
+            var map = fisher.Backpack.FindItemByType<TreasureMap>();
+            if (map == null || map.Deleted || map.Completed || map.RootParent != fisher) return false;
+
+            foreach (var hunter in PlayerBotService.FindBots())
+            {
+                if (!IsEligibleBuyer(hunter) || !IsEligibleSeller(hunter, fisher) || map.Facet != hunter.Map) continue;
+                if (TryPurchaseMap(hunter, fisher, map)) return true;
+            }
+            return false;
+        }
+
         internal static bool IsActive(PlayerBot bot)
         {
             return bot != null && !bot.Deleted && bot.Alive
