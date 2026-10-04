@@ -132,6 +132,7 @@ namespace Server.CustomBots
                     guild.AddMember(candidate);
                     guild.GuildChat(sponsor, candidate.Name + " joined the Fellowship at " + sponsor.BankVisitName + ".");
                     PlayerBotService.RecordPartyEvent(candidate.Name + " joined the native PlayerBot Fellowship at " + sponsor.BankVisitName + ".");
+                    PlayerBotJournal.RecordGuildRecruit(candidate, "the Fellowship");
                     return;
                 }
             }

@@ -23,11 +23,23 @@ namespace Server.CustomBots
         internal static void RecordParty(PlayerBot leader, int members)
         {
             if (leader == null || leader.Deleted || String.IsNullOrEmpty(leader.Name) || members < 2) return;
+            Record(leader, leader.Name + " formed a party with " + members + " companions.");
+        }
+
+        internal static void RecordGuildRecruit(PlayerBot recruit, string guildName)
+        {
+            if (recruit == null || recruit.Deleted || String.IsNullOrEmpty(recruit.Name) || String.IsNullOrEmpty(guildName)) return;
+            Record(recruit, recruit.Name + " joined " + guildName + ".");
+        }
+
+        private static void Record(PlayerBot actor, string text)
+        {
+            if (actor == null || actor.Deleted || String.IsNullOrEmpty(text)) return;
             Entries.Enqueue(new Story
             {
-                ActorSerial = leader.Serial.Value,
+                ActorSerial = actor.Serial.Value,
                 At = DateTime.UtcNow,
-                Text = leader.Name + " formed a party with " + members + " companions."
+                Text = text
             });
             while (Entries.Count > Capacity) Entries.Dequeue();
         }
