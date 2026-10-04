@@ -507,6 +507,7 @@ namespace Server.CustomBots
             PlayerBotGuilds.ReconcileAutonomousMembership();
             PlayerBotParties.ReconcileAutonomousParties();
             ReconcileAutonomousLabor();
+            PlayerBotTreasureHunts.ReconcileAutonomousAcquisition();
             foreach (var bot in FindBots()) Tick(bot);
         }
 
