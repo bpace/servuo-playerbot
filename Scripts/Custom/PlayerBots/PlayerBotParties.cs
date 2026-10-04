@@ -552,6 +552,7 @@ namespace Server.CustomBots
             }
             ManagedLeaders[leader.Serial.Value] = DateTime.UtcNow + Lifetime;
             PlayerBotService.RecordPartyEvent(leader.Name + " formed an " + kind + " party with " + members.Count + " bots.");
+            PlayerBotJournal.Record(leader.Name + " formed a party with " + members.Count + " companions.");
         }
 
         // ServUO's native Party leader is immutable. For a bot-only managed
