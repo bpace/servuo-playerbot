@@ -32,6 +32,12 @@ namespace Server.CustomBots
             Record(recruit, recruit.Name + " joined " + guildName + ".");
         }
 
+        internal static void RecordTreasureCompletion(PlayerBot hunter)
+        {
+            if (hunter == null || hunter.Deleted || String.IsNullOrEmpty(hunter.Name)) return;
+            Record(hunter, hunter.Name + " returned from a treasure hunt.");
+        }
+
         private static void Record(PlayerBot actor, string text)
         {
             if (actor == null || actor.Deleted || String.IsNullOrEmpty(text)) return;

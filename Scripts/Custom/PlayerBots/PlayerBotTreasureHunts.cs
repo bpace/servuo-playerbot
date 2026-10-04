@@ -285,6 +285,7 @@ namespace Server.CustomBots
             TryLootOne(bot, chest);
             if (chest.Items.Count == 0)
             {
+                PlayerBotJournal.RecordTreasureCompletion(bot);
                 Clear(bot, "looted a native treasure chest");
                 return;
             }
