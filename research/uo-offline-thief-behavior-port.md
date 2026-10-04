@@ -19,3 +19,5 @@ Banking a successful haul, dungeon roaming, stealth navigation, and the full mar
 ## Acceptance evidence
 
 Before deployment, compile the mod against the AoS ServUO Scripts project and use a static check that no thief entry point can run outside Felucca or bypass `Stealing.OnUse`. After deployment, test only with a disposable non-staff player character carrying a disposable eligible item, then verify the native criminal/stealing result in shard logs and dashboard state. Do not test theft against an unaware real player.
+
+2026-10-03 decision: retain the consent-only GM test as the safe ServUO-native boundary. Autonomous upstream-style player targeting is unavailable because the source system would operate on real player inventory and cause native criminal, guard, notoriety, and item-loss consequences without explicit consent.
