@@ -156,6 +156,28 @@ namespace Server.CustomBots
         [CommandProperty(AccessLevel.GameMaster)]
         public int PreferredCompanionSerial { get; set; }
 
+        // A party creates a small, ordered memory of the people a bot has
+        // actually travelled with. Three edges keep the social graph useful
+        // without turning the world save into an unbounded relationship log.
+        public List<int> KnownCompanionSerials { get; private set; }
+
+        public void RememberCompanion(PlayerBot companion)
+        {
+            if (companion == null || companion == this || companion.Deleted) return;
+            if (KnownCompanionSerials == null) KnownCompanionSerials = new List<int>();
+            KnownCompanionSerials.Remove(companion.Serial.Value);
+            KnownCompanionSerials.Insert(0, companion.Serial.Value);
+            while (KnownCompanionSerials.Count > 3) KnownCompanionSerials.RemoveAt(KnownCompanionSerials.Count - 1);
+            PreferredCompanionSerial = KnownCompanionSerials[0];
+        }
+
+        public bool KnowsCompanion(PlayerBot companion)
+        {
+            return companion != null && companion != this && !companion.Deleted
+                && ((KnownCompanionSerials != null && KnownCompanionSerials.Contains(companion.Serial.Value))
+                    || PreferredCompanionSerial == companion.Serial.Value);
+        }
+
         [CommandProperty(AccessLevel.GameMaster)]
         public int CorpseRecoverySerial { get; set; }
 
@@ -279,6 +301,7 @@ namespace Server.CustomBots
             HuntMap = null;
             HuntChest = null;
             PreferredCompanionSerial = 0;
+            KnownCompanionSerials = new List<int>();
             CorpseRecoverySerial = 0;
             CorpseRecoveryUntil = DateTime.MinValue;
             SpawnSource = "";
@@ -333,7 +356,7 @@ namespace Server.CustomBots
         public override void Serialize(GenericWriter writer)
         {
             base.Serialize(writer);
-            writer.Write(18);
+            writer.Write(19);
             writer.Write((int)BotRole);
             writer.Write(Destination);
             writer.Write(DestinationName);
@@ -379,6 +402,9 @@ namespace Server.CustomBots
             writer.Write(TamedAt);
             writer.Write(HuntMap);
             writer.Write(HuntChest);
+            writer.Write(KnownCompanionSerials == null ? 0 : KnownCompanionSerials.Count);
+            if (KnownCompanionSerials != null)
+                foreach (var serial in KnownCompanionSerials) writer.Write(serial);
         }
 
         public override void Deserialize(GenericReader reader)
@@ -434,6 +460,20 @@ namespace Server.CustomBots
             TamedAt = version >= 16 ? reader.ReadDateTime() : DateTime.MinValue;
             HuntMap = version >= 17 ? reader.ReadItem() as TreasureMap : null;
             HuntChest = version >= 18 ? reader.ReadItem() as TreasureMapChest : null;
+            KnownCompanionSerials = new List<int>();
+            if (version >= 19)
+            {
+                var count = reader.ReadInt();
+                for (var i = 0; i < count; i++)
+                {
+                    var serial = reader.ReadInt();
+                    if (serial != 0 && !KnownCompanionSerials.Contains(serial) && KnownCompanionSerials.Count < 3)
+                        KnownCompanionSerials.Add(serial);
+                }
+            }
+            if (PreferredCompanionSerial != 0 && !KnownCompanionSerials.Contains(PreferredCompanionSerial))
+                KnownCompanionSerials.Insert(0, PreferredCompanionSerial);
+            while (KnownCompanionSerials.Count > 3) KnownCompanionSerials.RemoveAt(KnownCompanionSerials.Count - 1);
             Player = false;
         }
     }

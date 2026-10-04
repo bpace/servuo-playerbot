@@ -520,8 +520,8 @@ namespace Server.CustomBots
         {
             if (leader == null || candidate == null) return 0;
             var affinity = 0;
-            if (leader.PreferredCompanionSerial == candidate.Serial.Value) affinity += 2;
-            if (candidate.PreferredCompanionSerial == leader.Serial.Value) affinity++;
+            if (leader.KnowsCompanion(candidate)) affinity += 2;
+            if (candidate.KnowsCompanion(leader)) affinity++;
             return affinity;
         }
 
@@ -530,11 +530,19 @@ namespace Server.CustomBots
         // inventing player interaction or taking over normal behavior.
         internal static void TryGreetPreferredCompanion(PlayerBot bot)
         {
-            if (bot == null || bot.Deleted || !bot.Alive || bot.Combatant != null || bot.PreferredCompanionSerial == 0) return;
+            if (bot == null || bot.Deleted || !bot.Alive || bot.Combatant != null || bot.KnownCompanionSerials == null) return;
             DateTime next;
             if (NextCompanionGreeting.TryGetValue(bot.Serial.Value, out next) && DateTime.UtcNow < next) return;
-            var companion = World.FindMobile((Serial)bot.PreferredCompanionSerial) as PlayerBot;
-            if (companion == null || companion.Deleted || !companion.Alive || companion.Map != bot.Map || companion.Combatant != null || !bot.InRange(companion, 8)) return;
+            PlayerBot companion = null;
+            foreach (var serial in bot.KnownCompanionSerials)
+            {
+                var candidate = World.FindMobile((Serial)serial) as PlayerBot;
+                if (candidate == null || candidate.Deleted || !candidate.Alive || candidate.Map != bot.Map
+                    || candidate.Combatant != null || !bot.InRange(candidate, 8)) continue;
+                companion = candidate;
+                break;
+            }
+            if (companion == null) return;
             bot.Say("Good to see you again, " + companion.Name + ".");
             NextCompanionGreeting[bot.Serial.Value] = DateTime.UtcNow + TimeSpan.FromMinutes(30);
         }
@@ -545,11 +553,9 @@ namespace Server.CustomBots
             var party = new Party(leader);
             leader.Party = party;
             for (var i = 1; i < members.Count; i++) party.Add(members[i]);
-            if (members.Count > 1)
-            {
-                leader.PreferredCompanionSerial = members[1].Serial.Value;
-                for (var i = 1; i < members.Count; i++) members[i].PreferredCompanionSerial = leader.Serial.Value;
-            }
+            foreach (var member in members)
+                foreach (var companion in members)
+                    member.RememberCompanion(companion);
             ManagedLeaders[leader.Serial.Value] = DateTime.UtcNow + Lifetime;
             PlayerBotService.RecordPartyEvent(leader.Name + " formed an " + kind + " party with " + members.Count + " bots.");
             PlayerBotJournal.RecordParty(leader, members.Count);
