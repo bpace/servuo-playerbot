@@ -180,6 +180,11 @@ namespace Server.CustomBots
             // subsequent guardian spawns stay entirely under the chest.
             chest.OnDoubleClick(bot);
             TryLootOne(bot, chest);
+            if (chest.Items.Count == 0)
+            {
+                Clear(bot, "looted a native treasure chest");
+                return;
+            }
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(3);
         }
 
