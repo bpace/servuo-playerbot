@@ -11,6 +11,7 @@ namespace Server.CustomBots
     // chat rules. The registry only owns expiry and follower movement.
     public static class PlayerBotParties
     {
+        private static readonly Dictionary<int, DateTime> NextCompanionGreeting = new Dictionary<int, DateTime>();
         private static readonly Dictionary<int, DateTime> ManagedLeaders = new Dictionary<int, DateTime>();
         private static readonly HashSet<int> PlayerLedLeaders = new HashSet<int>();
         private static readonly Dictionary<int, DateTime> PlayerLedSeparationSince = new Dictionary<int, DateTime>();
@@ -522,6 +523,20 @@ namespace Server.CustomBots
             if (leader.PreferredCompanionSerial == candidate.Serial.Value) affinity += 2;
             if (candidate.PreferredCompanionSerial == leader.Serial.Value) affinity++;
             return affinity;
+        }
+
+        // The persisted companion edge is formed by real completed parties.
+        // A brief, throttled greeting makes that memory visible without
+        // inventing player interaction or taking over normal behavior.
+        internal static void TryGreetPreferredCompanion(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || !bot.Alive || bot.Combatant != null || bot.PreferredCompanionSerial == 0) return;
+            DateTime next;
+            if (NextCompanionGreeting.TryGetValue(bot.Serial.Value, out next) && DateTime.UtcNow < next) return;
+            var companion = World.FindMobile((Serial)bot.PreferredCompanionSerial) as PlayerBot;
+            if (companion == null || companion.Deleted || !companion.Alive || companion.Map != bot.Map || companion.Combatant != null || !bot.InRange(companion, 8)) return;
+            bot.Say("Good to see you again, " + companion.Name + ".");
+            NextCompanionGreeting[bot.Serial.Value] = DateTime.UtcNow + TimeSpan.FromMinutes(30);
         }
 
         private static void Form(List<PlayerBot> members, string kind)

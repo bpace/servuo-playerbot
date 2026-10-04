@@ -516,6 +516,7 @@ namespace Server.CustomBots
             if (bot == null) return;
             NormalizeCombatState(bot);
             if (DateTime.UtcNow < bot.NextAction) return;
+            PlayerBotParties.TryGreetPreferredCompanion(bot);
             PlayerBotBehaviorRegistry.Tick(bot);
         }
 
