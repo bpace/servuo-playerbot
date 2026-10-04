@@ -9,6 +9,32 @@ namespace Server.CustomBots
     public static class PlayerBotTreasureHunts
     {
         private const int DigRange = 4;
+        private static readonly TimeSpan AcquisitionReconcileInterval = TimeSpan.FromMinutes(2);
+        private static DateTime _nextAcquisitionReconcile;
+
+        // Fishing is one of ServUO's native TreasureMap sources. Keep the
+        // UO Offline map-sale scene honest: a hunter can acquire only an
+        // actual unfinished map already caught by a nearby PlayerBot fisher,
+        // and its existing gold physically changes hands with that map.
+        internal static void ReconcileAutonomousAcquisition()
+        {
+            var now = DateTime.UtcNow;
+            if (now < _nextAcquisitionReconcile) return;
+            _nextAcquisitionReconcile = now + AcquisitionReconcileInterval;
+            if (Utility.RandomDouble() >= 0.25) return;
+
+            foreach (var hunter in PlayerBotService.FindBots())
+            {
+                if (!IsEligibleBuyer(hunter)) continue;
+                foreach (var fisher in PlayerBotService.FindBots())
+                {
+                    if (!IsEligibleSeller(hunter, fisher)) continue;
+                    var map = fisher.Backpack.FindItemByType<TreasureMap>();
+                    if (map == null || map.Deleted || map.Completed || map.RootParent != fisher || map.Facet != hunter.Map) continue;
+                    if (TryPurchaseMap(hunter, fisher, map)) return;
+                }
+            }
+        }
 
         internal static bool IsActive(PlayerBot bot)
         {
@@ -95,6 +121,65 @@ namespace Server.CustomBots
             bot.RouteIndex = 0;
             bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(1);
             return true;
+        }
+
+        private static bool IsEligibleBuyer(PlayerBot hunter)
+        {
+            return hunter != null && !hunter.Deleted && hunter.Alive && hunter.BotRole == PlayerBotRole.TreasureHunter
+                && hunter.HuntMap == null && hunter.HuntChest == null && hunter.Backpack != null
+                && hunter.Map != null && hunter.Map != Map.Internal && hunter.Combatant == null
+                && hunter.LaborKind == PlayerBotLaborKind.None && hunter.Destination == Point3D.Zero;
+        }
+
+        private static bool IsEligibleSeller(PlayerBot hunter, PlayerBot fisher)
+        {
+            return fisher != null && fisher != hunter && !fisher.Deleted && fisher.Alive
+                && fisher.LaborKind == PlayerBotLaborKind.Fisher && fisher.Backpack != null
+                && fisher.Map == hunter.Map && fisher.Combatant == null && fisher.InRange(hunter, 8);
+        }
+
+        private static bool TryPurchaseMap(PlayerBot hunter, PlayerBot fisher, TreasureMap map)
+        {
+            var price = Utility.RandomMinMax(150, 400);
+            var purse = hunter.Backpack.FindItemByType<Gold>();
+            if (purse == null || purse.Deleted || purse.Amount < price
+                || !hunter.Backpack.CheckHold(hunter, map, false, true)) return false;
+
+            var payment = TakeFromPack(hunter.Backpack, purse, price);
+            if (payment == null || !fisher.Backpack.CheckHold(fisher, payment, false, true))
+            {
+                if (payment != null) hunter.Backpack.DropItem(payment);
+                return false;
+            }
+
+            fisher.Backpack.RemoveItem(map);
+            hunter.Backpack.DropItem(map);
+            if (map.RootParent != hunter)
+            {
+                fisher.Backpack.DropItem(map);
+                hunter.Backpack.DropItem(payment);
+                return false;
+            }
+
+            fisher.Backpack.DropItem(payment);
+            if (!Assign(hunter, map)) return false;
+            hunter.Say("I'll take that treasure map.");
+            fisher.Say("A fair trade.");
+            PlayerBotService.RecordEvent(hunter.Name + " bought a native treasure map from " + fisher.Name + " for " + price + " gold.");
+            return true;
+        }
+
+        private static Item TakeFromPack(Container pack, Item item, int amount)
+        {
+            if (pack == null || item == null || item.Deleted || amount <= 0 || amount > item.Amount) return null;
+            if (amount == item.Amount)
+            {
+                pack.RemoveItem(item);
+                return item;
+            }
+            var moved = Mobile.LiftItemDupe(item, amount);
+            if (moved != null) pack.RemoveItem(moved);
+            return moved;
         }
 
         private static void MoveToDigRange(PlayerBot bot, Point3D chest)
