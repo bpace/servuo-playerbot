@@ -1440,6 +1440,17 @@ namespace Server.CustomBots
                 && kind.StartsWith("Vendor", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool TryTellTavernStory(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || bot.Combatant != null
+                || !String.Equals(bot.BankVisitKind, "Tavern", StringComparison.OrdinalIgnoreCase)) return false;
+
+            var story = PlayerBotJournal.PickRecentFor(bot);
+            if (String.IsNullOrEmpty(story)) return false;
+            bot.Say(story);
+            return true;
+        }
+
         private static void DoDestinationVisitAction(PlayerBot bot)
         {
             var action = Utility.Random(100);
@@ -1496,6 +1507,7 @@ namespace Server.CustomBots
             }
             if (String.Equals(bot.BankVisitKind, "Tavern", StringComparison.OrdinalIgnoreCase))
             {
+                if (action < 20 && TryTellTavernStory(bot)) return;
                 if (action < 30) bot.Say("Any hunters looking for company?");
                 else if (action < 52) bot.Say("A drink and a tale from the road.");
                 else if (action < 70) bot.Say("Looking for a party before nightfall.");

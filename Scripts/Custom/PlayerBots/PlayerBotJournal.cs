@@ -7,20 +7,60 @@ namespace Server.CustomBots
     public static class PlayerBotJournal
     {
         private const int Capacity = 100;
-        private static readonly Queue<string> Entries = new Queue<string>();
+        private static readonly TimeSpan StoryMinAge = TimeSpan.FromMinutes(1);
+        private static readonly TimeSpan StoryMaxAge = TimeSpan.FromHours(3);
+        private static readonly TimeSpan RetellCooldown = TimeSpan.FromMinutes(15);
+        private static readonly Queue<Story> Entries = new Queue<Story>();
+        private static readonly Dictionary<int, DateTime> NextTell = new Dictionary<int, DateTime>();
 
-        internal static void Record(string message)
+        private sealed class Story
         {
-            if (String.IsNullOrEmpty(message)) return;
-            Entries.Enqueue(DateTime.UtcNow.ToString("HH:mm") + " " + message);
+            public int ActorSerial;
+            public DateTime At;
+            public string Text;
+        }
+
+        internal static void RecordParty(PlayerBot leader, int members)
+        {
+            if (leader == null || leader.Deleted || String.IsNullOrEmpty(leader.Name) || members < 2) return;
+            Entries.Enqueue(new Story
+            {
+                ActorSerial = leader.Serial.Value,
+                At = DateTime.UtcNow,
+                Text = leader.Name + " formed a party with " + members + " companions."
+            });
             while (Entries.Count > Capacity) Entries.Dequeue();
         }
 
-        internal static string PickRecent()
+        // UO Offline's event journal only repeats real events. This smaller
+        // ServUO slice intentionally carries only PlayerBot party formation,
+        // excludes the speaker's own story, and is never a dashboard feed.
+        internal static string PickRecentFor(PlayerBot speaker)
         {
-            if (Entries.Count == 0) return null;
-            var entries = Entries.ToArray();
-            return entries[Utility.Random(entries.Length)];
+            if (speaker == null || speaker.Deleted || Entries.Count == 0) return null;
+
+            var now = DateTime.UtcNow;
+            DateTime allowedAt;
+            if (NextTell.TryGetValue(speaker.Serial.Value, out allowedAt) && now < allowedAt) return null;
+
+            var candidates = new List<Story>();
+            foreach (var story in Entries)
+            {
+                var age = now - story.At;
+                if (story.ActorSerial == speaker.Serial.Value || age < StoryMinAge || age > StoryMaxAge) continue;
+                candidates.Add(story);
+            }
+            if (candidates.Count == 0) return null;
+
+            NextTell[speaker.Serial.Value] = now + RetellCooldown;
+            if (NextTell.Count > 512)
+            {
+                var stale = new List<int>();
+                foreach (var entry in NextTell)
+                    if (entry.Value <= now) stale.Add(entry.Key);
+                foreach (var serial in stale) NextTell.Remove(serial);
+            }
+            return "I heard " + candidates[Utility.Random(candidates.Count)].Text;
         }
     }
 }
