@@ -57,6 +57,27 @@ namespace Server.CustomBots
             else bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(5);
         }
 
+        // Combat owns target selection. This adapter only gives the tamer's
+        // already-controlled living pet the same native attack order a player
+        // would issue. It never selects a new target, crosses facets, or
+        // changes control ownership.
+        internal static void CommandPetAgainstCombatant(PlayerBot bot)
+        {
+            if (bot == null || bot.Deleted || !bot.Alive || bot.BotRole != PlayerBotRole.Tamer) return;
+
+            var pet = bot.TamedPet;
+            var target = bot.Combatant as Mobile;
+            if (pet == null || pet.Deleted || !pet.Alive || !pet.Controlled || pet.ControlMaster != bot
+                || target == null || target.Deleted || !target.Alive || target == pet || target.Map != pet.Map
+                || !bot.CanBeHarmful(target, false)) return;
+
+            if (pet.ControlOrder == OrderType.Attack && pet.ControlTarget == target) return;
+
+            pet.ControlTarget = target;
+            pet.ControlOrder = OrderType.Attack;
+            bot.Say("all kill");
+        }
+
         internal static void ReleasePets(PlayerBot bot)
         {
             if (bot == null) return;
@@ -112,8 +133,15 @@ namespace Server.CustomBots
                 return true;
             }
 
-            // The native control order keeps the pet following while ordinary
-            // Traveler movement provides UO Offline's visible parade phase.
+            // Combat takes priority over this behavior. Once it finishes,
+            // return the pet to its ordinary native follow order before the
+            // visible parade travel resumes.
+            if (pet.ControlOrder == OrderType.Attack)
+            {
+                pet.ControlTarget = bot;
+                pet.ControlOrder = OrderType.Follow;
+                bot.Say("all follow me");
+            }
             PlayerBotService.TickTravelBehavior(bot);
             return true;
         }
