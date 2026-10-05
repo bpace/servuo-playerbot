@@ -264,6 +264,7 @@ namespace Server.CustomBots
                     var price = Price(stock);
                     if (stock == null || stock.Deleted || price <= 0 || stock.Parent != hawker.Backpack
                         || !buyer.Backpack.CheckHold(buyer, stock, false, true)
+                        || !NeedsPurchasedSupply(buyer, stock)
                         || !CanUsePurchasedCombatItem(buyer, stock)) continue;
 
                     var purse = buyer.Backpack.FindItemByType<Gold>();
@@ -288,6 +289,27 @@ namespace Server.CustomBots
             }
             finally { nearby.Free(); }
             return false;
+        }
+
+        // The UO Offline supply errand starts only when a class-relevant
+        // consumable is low. Keep the native Hawker equivalent equally
+        // demand-led: a full physical stack is never bought as decorative
+        // stock, and buying can only top up a supply this port actually uses.
+        // Bandages feed the existing native solo/party BandageContext path;
+        // arrows only feed an equipped native ranged weapon. Reagents remain
+        // excluded until the port has a complete real casting supply loop.
+        private static bool NeedsPurchasedSupply(PlayerBot buyer, Item stock)
+        {
+            if (stock is Bandage)
+                return buyer.Backpack.GetAmount(typeof(Bandage)) < 8;
+
+            if (stock is Arrow)
+                return buyer.Weapon is BaseRanged && buyer.Backpack.GetAmount(typeof(Arrow)) < 25;
+
+            if (stock is Garlic || stock is MandrakeRoot)
+                return false;
+
+            return true;
         }
 
         // Crafted combat equipment should enter the normal equipment path,
