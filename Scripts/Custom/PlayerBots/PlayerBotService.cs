@@ -2026,9 +2026,11 @@ namespace Server.CustomBots
                 killer.ShortTermMurders++;
                 killer.ResetKillTime();
                 killer.SendLocalizedMessage(1049067);
-                if (killer.Kills == 5) ReportMurdererGump.CheckMurderer(killer);
+                // Match the native report-gump response: every qualifying
+                // aggressor is reported, and ServUO owns any murderer-state
+                // consequences after each accepted report.
+                ReportMurdererGump.CheckMurderer(killer);
                 RecordEvent(victim.Name + " reported " + killer.Name + " for murder.");
-                break;
             }
         }
 
