@@ -761,6 +761,7 @@ namespace Server.CustomBots
 
         internal static void TickCombatBehavior(PlayerBot bot)
         {
+            PlayerBotTaming.CommandPetAgainstCombatant(bot);
             if (TryBandageSelf(bot))
             {
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromSeconds(1);
