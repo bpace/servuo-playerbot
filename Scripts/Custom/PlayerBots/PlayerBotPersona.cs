@@ -51,10 +51,6 @@ namespace Server.CustomBots
             if (bot == null || bot.Deleted)
                 return;
 
-            // Existing bots predate personas. Hair is also the durable marker
-            // that a legacy bot has received its one-time mount roll: do not
-            // grant a fresh 20% chance on every restart.
-            var isLegacyPersona = bot.HairItemID <= 0;
             RepairLegLayer(bot);
             if (HasLegacyNumberedName(bot.Name))
                 bot.Name = NextName(bot.Female);
@@ -62,8 +58,6 @@ namespace Server.CustomBots
             ApplyGrooming(bot);
             if (!HasOutfit(bot))
                 Equip(bot);
-            else if (isLegacyPersona && UsesMount(bot))
-                MaybeMount(bot);
         }
 
         private static void ApplyGrooming(PlayerBot bot)
@@ -110,7 +104,6 @@ namespace Server.CustomBots
             WearIfEmpty(bot, Layer.Shoes, new Boots());
             WearIfEmpty(bot, Layer.Cloak, new Cloak(hue));
             EquipWeapon(bot, new Longsword());
-            MaybeMount(bot);
         }
 
         private static void EquipBanker(PlayerBot bot)
@@ -140,7 +133,6 @@ namespace Server.CustomBots
             WearIfEmpty(bot, Layer.Pants, new LeatherLegs());
             WearIfEmpty(bot, Layer.Cloak, new Cloak(hue));
             EquipWeapon(bot, Utility.RandomBool() ? (Item)new Katana() : new Longsword());
-            MaybeMount(bot);
         }
 
         private static void EquipPlayerKiller(PlayerBot bot)
@@ -168,16 +160,6 @@ namespace Server.CustomBots
             WearIfEmpty(bot, Layer.OneHanded, weapon);
         }
 
-        private static void MaybeMount(PlayerBot bot)
-        {
-            if (UsesMount(bot) && !bot.Mounted && Utility.Random(5) == 0)
-                new Horse().Rider = bot;
-        }
-
-        private static bool UsesMount(PlayerBot bot)
-        {
-            return bot.BotRole == PlayerBotRole.Traveler || bot.BotRole == PlayerBotRole.Adventurer;
-        }
 
         private static void WearIfEmpty(PlayerBot bot, Layer layer, Item item)
         {
