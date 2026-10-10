@@ -820,6 +820,7 @@ namespace Server.CustomBots
             var direction = bot.GetDirectionTo(travelTarget) | Direction.Running;
             if (!bot.Move(direction))
             {
+                PlayerBotStuckTelemetry.RecordMoveFailure(bot, travelTarget);
                 if (bot.RoutePoints != null) bot.RoutePoints.Clear();
                 bot.RouteIndex = 0;
                 AssignDestination(bot);
