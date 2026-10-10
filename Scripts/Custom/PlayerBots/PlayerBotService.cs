@@ -2030,6 +2030,7 @@ namespace Server.CustomBots
                 // aggressor is reported, and ServUO owns any murderer-state
                 // consequences after each accepted report.
                 ReportMurdererGump.CheckMurderer(killer);
+                PlayerBotDangerMap.NoteReportedMurder(victim);
                 RecordEvent(victim.Name + " reported " + killer.Name + " for murder.");
             }
         }

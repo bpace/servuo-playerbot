@@ -424,7 +424,44 @@ namespace Server.CustomBots
                         && !String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)
                         && !String.Equals(destination.Kind, "DungeonAscend", StringComparison.OrdinalIgnoreCase)
                         && !String.Equals(destination.Kind, "DungeonDescend", StringComparison.OrdinalIgnoreCase)) matches.Add(destination);
-                return matches.Count == 0 ? null : matches[Utility.Random(matches.Count)];
+                if (matches.Count == 0) return null;
+
+                // The danger map is only a route preference. A hot destination
+                // remains reachable, and all movement still uses this class's
+                // normal facet-validated graph plan.
+                var totalWeight = 0.0;
+                foreach (var destination in matches)
+                    totalWeight += PlayerBotDangerMap.DestinationWeight(map, destination);
+                var roll = Utility.RandomDouble() * totalWeight;
+                foreach (var destination in matches)
+                {
+                    roll -= PlayerBotDangerMap.DestinationWeight(map, destination);
+                    if (roll <= 0.0) return destination;
+                }
+                return matches[matches.Count - 1];
+            }
+        }
+
+        internal static PlayerBotDestination FindNearestDestination(Map map, Point3D location, int range)
+        {
+            if (map == null || map == Map.Internal || range < 0) return null;
+
+            lock (Sync)
+            {
+                PlayerBotDestination nearest = null;
+                var nearestDistance = range + 1;
+                foreach (var destination in _data.Destinations)
+                {
+                    if (!String.Equals(destination.Facet, map.Name, StringComparison.OrdinalIgnoreCase)
+                        || String.Equals(destination.Kind, "DungeonRoom", StringComparison.OrdinalIgnoreCase)
+                        || String.Equals(destination.Kind, "DungeonAscend", StringComparison.OrdinalIgnoreCase)
+                        || String.Equals(destination.Kind, "DungeonDescend", StringComparison.OrdinalIgnoreCase)) continue;
+                    var distance = Math.Max(Math.Abs(destination.X - location.X), Math.Abs(destination.Y - location.Y));
+                    if (distance > range || distance >= nearestDistance) continue;
+                    nearest = destination;
+                    nearestDistance = distance;
+                }
+                return nearest;
             }
         }
 

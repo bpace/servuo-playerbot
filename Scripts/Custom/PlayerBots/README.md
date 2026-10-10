@@ -48,6 +48,8 @@ A player can instead lead a party by standing beside an eligible bot and using `
 
 An idle Traveler or Adventurer visiting a tavern is eligible for that explicit player request. Joining ends the visitor session before party follow starts. Bank fixtures, combatants, laborers, recovery bots, and dungeon travelers remain ineligible.
 
+Native murder reports now add temporary heat only to the nearest existing authored destination on that facet. Warm and hot locations are less likely to be selected for ordinary travel, but remain valid destinations and use the same validated route planner. The adapter does not add red-sighting alarms, guard calls, teleports, or combat behavior.
+
 If a player-led party leader changes facet, a bot remains in the native party for two minutes in case the leader returns. It then leaves cleanly and resumes ordinary behavior rather than remaining attached to an unreachable leader.
 
 ## Native bot guild
