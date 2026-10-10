@@ -1177,7 +1177,7 @@ namespace Server.CustomBots
             }
             if (bot.BotRole == PlayerBotRole.Banker)
             {
-                Banker.Deposit(bot, 100, false);
+                TrySettleBankGold(bot);
                 SayAtInterval(bot, "bank", "Balance looks good. Anyone buying reagents?");
             }
             else if (bot.BotRole == PlayerBotRole.Adventurer)
@@ -1580,6 +1580,33 @@ namespace Server.CustomBots
             if (shrine.IndexOf("Spirituality", StringComparison.OrdinalIgnoreCase) >= 0) return "Om";
             if (shrine.IndexOf("Valor", StringComparison.OrdinalIgnoreCase) >= 0) return "Ra";
             return "";
+        }
+
+        // ServUO's static Banker.Deposit writes the supplied amount into the
+        // bank box.  Callers must remove real backpack gold first; otherwise
+        // a headless bot would create currency.  Limit this to a live banker
+        // in normal banking range, matching the UO Offline banking contract.
+        private static bool TrySettleBankGold(PlayerBot bot)
+        {
+            if (bot == null || bot.Backpack == null || bot.Criminal) return false;
+
+            var bankerNearby = false;
+            foreach (var mobile in bot.Map.GetMobilesInRange(bot.Location, 12))
+                if (mobile is Banker && !mobile.Deleted)
+                {
+                    bankerNearby = true;
+                    break;
+                }
+            if (!bankerNearby) return false;
+
+            const int pocketGold = 500;
+            const int minimumDeposit = 100;
+            var surplus = bot.Backpack.GetAmount(typeof(Gold)) - pocketGold;
+            if (surplus < minimumDeposit || !bot.Backpack.ConsumeTotal(typeof(Gold), surplus)) return false;
+            if (Banker.Deposit(bot, surplus, false)) return true;
+
+            bot.Backpack.DropItem(new Gold(surplus));
+            return false;
         }
 
         private static void AssignDestination(PlayerBot bot)
