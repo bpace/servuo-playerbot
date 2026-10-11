@@ -92,6 +92,8 @@ namespace Server.CustomBots
         public static void Initialize()
         {
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
+            CommandSystem.Register("BotWhere", AccessLevel.GameMaster, OnBotWhereCommand);
+            CommandSystem.Register("BotGoto", AccessLevel.GameMaster, OnBotGotoCommand);
             CommandSystem.Register("JoinBotParty", AccessLevel.Player, OnJoinBotPartyCommand);
             CommandSystem.Register("LeadBotParty", AccessLevel.Player, OnLeadBotPartyCommand);
             CommandSystem.Register("JoinBotGuild", AccessLevel.Player, OnJoinBotGuildCommand);
@@ -192,6 +194,16 @@ namespace Server.CustomBots
                 else foreach (var entry in entries) e.Mobile.SendMessage(entry);
                 return;
             }
+            if (action == "where")
+            {
+                SendBotLocations(e.Mobile, e.Length > 1 ? String.Join(" ", e.Arguments, 1, e.Length - 1) : "");
+                return;
+            }
+            if (action == "goto")
+            {
+                GoToBot(e.Mobile, e.Length > 1 ? String.Join(" ", e.Arguments, 1, e.Length - 1) : "");
+                return;
+            }
             if (action == "dungeontest")
             {
                 var map = e.Length > 1 ? GetMap(e.GetString(1)) : e.Mobile.Map;
@@ -276,7 +288,72 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], stuck, dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], stuck, where [name], goto <name>, dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+        }
+
+        private static void OnBotWhereCommand(CommandEventArgs e)
+        {
+            SendBotLocations(e.Mobile, e.ArgString ?? "");
+        }
+
+        private static void OnBotGotoCommand(CommandEventArgs e)
+        {
+            GoToBot(e.Mobile, e.ArgString ?? "");
+        }
+
+        private static void SendBotLocations(Mobile from, string filter)
+        {
+            if (from == null) return;
+            filter = (filter ?? "").Trim();
+            var matches = new List<PlayerBot>();
+            foreach (var bot in FindBots())
+            {
+                if (bot == null || bot.Deleted || bot.Map == null || bot.Map == Map.Internal) continue;
+                if (filter.Length > 0 && (bot.Name == null || bot.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)) continue;
+                matches.Add(bot);
+            }
+            matches.Sort((left, right) => String.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase));
+            if (matches.Count == 0)
+            {
+                from.SendMessage(filter.Length == 0 ? "No PlayerBots are currently in the world." : "No PlayerBots match '" + filter + ".'");
+                return;
+            }
+            from.SendMessage("PlayerBots: {0} match{1}.", matches.Count, filter.Length == 0 ? "" : " '" + filter + "'");
+            foreach (var bot in matches)
+            {
+                var region = bot.Region == null || String.IsNullOrEmpty(bot.Region.Name) ? "Wilderness" : bot.Region.Name;
+                var destination = String.IsNullOrEmpty(bot.DestinationName) ? "idle" : bot.DestinationName;
+                from.SendMessage("{0}: {1} {2},{3},{4} [{5}] to {6}.", bot.Name, bot.Map.Name, bot.X, bot.Y, bot.Z, region, destination);
+            }
+        }
+
+        private static void GoToBot(Mobile from, string requestedName)
+        {
+            if (from == null) return;
+            requestedName = (requestedName ?? "").Trim();
+            if (requestedName.Length == 0)
+            {
+                from.SendMessage("Usage: [BotGoto <name>] or [PlayerBots goto <name>].");
+                return;
+            }
+            PlayerBot partial = null;
+            foreach (var bot in FindBots())
+            {
+                if (bot == null || bot.Deleted || bot.Map == null || bot.Map == Map.Internal || String.IsNullOrEmpty(bot.Name)) continue;
+                if (String.Equals(bot.Name, requestedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    partial = bot;
+                    break;
+                }
+                if (partial == null && bot.Name.IndexOf(requestedName, StringComparison.OrdinalIgnoreCase) >= 0) partial = bot;
+            }
+            if (partial == null)
+            {
+                from.SendMessage("No PlayerBot matches '" + requestedName + ".'");
+                return;
+            }
+            from.MoveToWorld(partial.Location, partial.Map);
+            from.SendMessage("Teleported to {0} at {1},{2},{3} on {4}.", partial.Name, partial.X, partial.Y, partial.Z, partial.Map.Name);
         }
 
         private static string StartTreasureHunt(Mobile from)
