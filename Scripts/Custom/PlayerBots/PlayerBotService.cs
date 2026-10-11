@@ -8,6 +8,7 @@ using Server.SkillHandlers;
 using Server.Spells;
 using Server.Spells.First;
 using Server.Spells.Fourth;
+using Server.Targeting;
 
 namespace Server.CustomBots
 {
@@ -94,6 +95,7 @@ namespace Server.CustomBots
             CommandSystem.Register("PlayerBots", AccessLevel.GameMaster, OnCommand);
             CommandSystem.Register("BotWhere", AccessLevel.GameMaster, OnBotWhereCommand);
             CommandSystem.Register("BotGoto", AccessLevel.GameMaster, OnBotGotoCommand);
+            CommandSystem.Register("BotInfo", AccessLevel.GameMaster, OnBotInfoCommand);
             CommandSystem.Register("JoinBotParty", AccessLevel.Player, OnJoinBotPartyCommand);
             CommandSystem.Register("LeadBotParty", AccessLevel.Player, OnLeadBotPartyCommand);
             CommandSystem.Register("JoinBotGuild", AccessLevel.Player, OnJoinBotGuildCommand);
@@ -204,6 +206,11 @@ namespace Server.CustomBots
                 GoToBot(e.Mobile, e.Length > 1 ? String.Join(" ", e.Arguments, 1, e.Length - 1) : "");
                 return;
             }
+            if (action == "info")
+            {
+                BeginBotInfo(e.Mobile);
+                return;
+            }
             if (action == "dungeontest")
             {
                 var map = e.Length > 1 ? GetMap(e.GetString(1)) : e.Mobile.Map;
@@ -288,7 +295,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], stuck, where [name], goto <name>, dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], stuck, where [name], goto <name>, info, dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static void OnBotWhereCommand(CommandEventArgs e)
@@ -299,6 +306,55 @@ namespace Server.CustomBots
         private static void OnBotGotoCommand(CommandEventArgs e)
         {
             GoToBot(e.Mobile, e.ArgString ?? "");
+        }
+
+        private static void OnBotInfoCommand(CommandEventArgs e)
+        {
+            BeginBotInfo(e.Mobile);
+        }
+
+        private static void BeginBotInfo(Mobile from)
+        {
+            if (from == null) return;
+            from.SendMessage("Target a PlayerBot to inspect its native state.");
+            from.Target = new BotInfoTarget();
+        }
+
+        private sealed class BotInfoTarget : Target
+        {
+            public BotInfoTarget() : base(12, false, TargetFlags.None)
+            {
+            }
+
+            protected override void OnTarget(Mobile from, object targeted)
+            {
+                var bot = targeted as PlayerBot;
+                if (bot == null || bot.Deleted)
+                {
+                    from.SendMessage("That is not a live PlayerBot.");
+                    return;
+                }
+                SendBotInfo(from, bot);
+            }
+        }
+
+        private static void SendBotInfo(Mobile from, PlayerBot bot)
+        {
+            from.SendMessage("{0}: role {1}, {2} {3},{4},{5}.", bot.Name, bot.BotRole, bot.Map == null ? "Internal" : bot.Map.Name, bot.X, bot.Y, bot.Z);
+            from.SendMessage("Stats: Str {0}, Dex {1}, Int {2}; Hits {3}/{4}, Stam {5}/{6}, Mana {7}/{8}.", bot.RawStr, bot.RawDex, bot.RawInt, bot.Hits, bot.HitsMax, bot.Stam, bot.StamMax, bot.Mana, bot.ManaMax);
+            from.SendMessage("State: destination {0}; labor {1}; combat {2}; criminal {3}; kills {4}.", String.IsNullOrEmpty(bot.DestinationName) ? "none" : bot.DestinationName, GetLaborStatus(bot), bot.Combatant == null ? "none" : bot.Combatant.Name, bot.Criminal, bot.Kills);
+            var skills = new List<Skill>();
+            foreach (var skill in bot.Skills)
+                if (skill.Base > 0.0) skills.Add(skill);
+            skills.Sort((left, right) => right.Base.CompareTo(left.Base));
+            if (skills.Count == 0)
+            {
+                from.SendMessage("Skills: none above zero.");
+                return;
+            }
+            var text = "Skills:";
+            foreach (var skill in skills) text += " " + skill.SkillName + " " + skill.Base.ToString("F1") + ";";
+            from.SendMessage(text);
         }
 
         private static void SendBotLocations(Mobile from, string filter)
