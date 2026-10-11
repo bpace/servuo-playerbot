@@ -502,16 +502,22 @@ namespace Server.CustomBots
 
             if (!Banker.Withdraw(buyer, price, false)) return false;
             var payment = new Gold(price);
+            PlayerBotShopStockMarker marker = null;
             try
             {
                 seller.Backpack.RemoveItem(stock);
                 buyer.Backpack.DropItem(stock);
                 foreach (Item item in seller.Backpack.Items)
                 {
-                    var marker = item as PlayerBotShopStockMarker;
-                    if (marker != null && marker.Stock == stock) marker.Delete();
+                    var candidate = item as PlayerBotShopStockMarker;
+                    if (candidate != null && candidate.Stock == stock)
+                    {
+                        marker = candidate;
+                        break;
+                    }
                 }
                 seller.Backpack.DropItem(payment);
+                if (marker != null) marker.Delete();
                 seller.Say("A fair trade.");
                 buyer.SendMessage("You bought {0} {1} for {2} gold.", stock.Amount, StockName(stock), price);
                 return true;
