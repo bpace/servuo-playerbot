@@ -185,6 +185,13 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage(message);
                 return;
             }
+            if (action == "stuck")
+            {
+                var entries = PlayerBotStuckTelemetry.GetRecent(10);
+                if (entries.Count == 0) e.Mobile.SendMessage("No recent PlayerBot navigation stalls.");
+                else foreach (var entry in entries) e.Mobile.SendMessage(entry);
+                return;
+            }
             if (action == "dungeontest")
             {
                 var map = e.Length > 1 ? GetMap(e.GetString(1)) : e.Mobile.Map;
@@ -269,7 +276,7 @@ namespace Server.CustomBots
                 e.Mobile.SendMessage("Removed {0} PlayerBot(s).", bots.Count);
                 return;
             }
-            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
+            e.Mobile.SendMessage("PlayerBots: {0} live, combined target {1}, system {2}. Commands: spawn [count] [role], population [count], generate, audit [facet], dungeonaudit [facet], stuck, dungeontest [facet], partydungeontest [facet], labor miner|lumberjack|blacksmith, treasure, party [2-10], guild [2-10], thieving on|off, thievingtest <player name>, on, off, remove.", FindBots().Count, TargetPopulation, Enabled ? "on" : "off");
         }
 
         private static string StartTreasureHunt(Mobile from)
@@ -825,6 +832,7 @@ namespace Server.CustomBots
                 bot.RouteIndex = 0;
                 AssignDestination(bot);
             }
+            else PlayerBotStuckTelemetry.RecordMoveSuccess(bot);
             bot.NextAction = DateTime.UtcNow + MoveDelay();
         }
 
