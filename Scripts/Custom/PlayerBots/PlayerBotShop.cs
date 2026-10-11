@@ -501,6 +501,7 @@ namespace Server.CustomBots
                 || stock.Parent != seller.Backpack || buyer.Backpack == null || !buyer.Backpack.CheckHold(buyer, stock, false, true)) return false;
 
             if (!Banker.Withdraw(buyer, price, false)) return false;
+            var payment = new Gold(price);
             try
             {
                 seller.Backpack.RemoveItem(stock);
@@ -510,7 +511,7 @@ namespace Server.CustomBots
                     var marker = item as PlayerBotShopStockMarker;
                     if (marker != null && marker.Stock == stock) marker.Delete();
                 }
-                seller.Backpack.DropItem(new Gold(price));
+                seller.Backpack.DropItem(payment);
                 seller.Say("A fair trade.");
                 buyer.SendMessage("You bought {0} {1} for {2} gold.", stock.Amount, StockName(stock), price);
                 return true;
@@ -518,6 +519,7 @@ namespace Server.CustomBots
             catch
             {
                 if (!stock.Deleted && stock.Parent != seller.Backpack) seller.Backpack.DropItem(stock);
+                if (!payment.Deleted) payment.Delete();
                 Banker.Deposit(buyer, price, false);
                 return false;
             }
