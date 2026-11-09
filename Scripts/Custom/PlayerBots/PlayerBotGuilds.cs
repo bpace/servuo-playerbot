@@ -16,6 +16,11 @@ namespace Server.CustomBots
         private static DateTime NextAutonomousRecruit = DateTime.MinValue;
         private static readonly TimeSpan AutonomousRecruitInterval = TimeSpan.FromMinutes(3);
 
+        // The normal guild speech path is enabled with the new guild system.
+        // Earlier shards retain native guild membership but must not receive
+        // a newer MessageType.Guild packet from a headless bot.
+        private static bool SupportsGuildChat { get { return Core.SE && Guild.NewGuildSystem; } }
+
         public static string FormNear(Mobile caller, int requestedCount)
         {
             if (caller == null || caller.Map == null || caller.Map == Map.Internal)
@@ -89,7 +94,7 @@ namespace Server.CustomBots
         // in-memory cooldown prevents bank sitters from turning it into spam.
         public static bool TryGuildChat(PlayerBot bot)
         {
-            if (bot == null || bot.Deleted || !bot.Alive || Utility.RandomDouble() >= 0.18) return false;
+            if (!SupportsGuildChat || bot == null || bot.Deleted || !bot.Alive || Utility.RandomDouble() >= 0.18) return false;
             var guild = FindBotGuild();
             if (guild == null || bot.Guild != guild || guild.Members.Count < 2) return false;
 
@@ -130,7 +135,8 @@ namespace Server.CustomBots
                     if (!IsTavernRecruitCandidate(candidate, sponsor)) continue;
                     if (!String.Equals(candidate.BankVisitName, sponsor.BankVisitName, StringComparison.Ordinal)) continue;
                     guild.AddMember(candidate);
-                    guild.GuildChat(sponsor, candidate.Name + " joined the Fellowship at " + sponsor.BankVisitName + ".");
+                    if (SupportsGuildChat)
+                        guild.GuildChat(sponsor, candidate.Name + " joined the Fellowship at " + sponsor.BankVisitName + ".");
                     PlayerBotService.RecordPartyEvent(candidate.Name + " joined the native PlayerBot Fellowship at " + sponsor.BankVisitName + ".");
                     PlayerBotJournal.RecordGuildRecruit(candidate, "the Fellowship");
                     return;
