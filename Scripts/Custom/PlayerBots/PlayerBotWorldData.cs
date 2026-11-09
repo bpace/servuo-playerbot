@@ -192,6 +192,11 @@ namespace Server.CustomBots
         {
             name = (name ?? "").Trim();
             var map = PlayerBotService.GetMap(facet);
+            if (map == null)
+            {
+                message = "Facet is unavailable for this expansion.";
+                return false;
+            }
             if (name.Length == 0 || name.Length > 64)
             {
                 message = "Name must be between 1 and 64 characters.";
@@ -631,7 +636,7 @@ namespace Server.CustomBots
         // after completion, only verified legs enter route plans.
         internal static string StartRouteAudit(Map map)
         {
-            if (map == null || map == Map.Internal) return "No playable facet selected.";
+            if (!PlayerBotExpansionProfile.IsAvailable(map)) return "The selected facet is unavailable for this expansion.";
             lock (Sync)
             {
                 var nodes = new Dictionary<string, PlayerBotWaypoint>(StringComparer.OrdinalIgnoreCase);
@@ -668,6 +673,11 @@ namespace Server.CustomBots
                 {
                     if (audit.Complete) continue;
                     var map = PlayerBotService.GetMap(audit.Facet);
+                    if (map == null)
+                    {
+                        audit.Complete = true;
+                        return audit.Facet + " route audit stopped because that facet is unavailable for this expansion.";
+                    }
                     for (var i = 0; i < budget && audit.NextLeg < audit.Pending.Count; i++, audit.NextLeg++)
                     {
                         var leg = audit.Pending[audit.NextLeg];
@@ -697,8 +707,8 @@ namespace Server.CustomBots
 
         internal static void StartFacetAudits()
         {
-            StartRouteAudit(Map.Felucca);
-            StartRouteAudit(Map.Trammel);
+            foreach (var facetName in PlayerBotService.FacetNames)
+                StartRouteAudit(PlayerBotService.GetMap(facetName));
         }
 
         // The imported T2A records identify the surface entrance tiles, but
@@ -1008,6 +1018,11 @@ namespace Server.CustomBots
         {
             name = (name ?? "").Trim();
             var map = PlayerBotService.GetMap(facet);
+            if (map == null)
+            {
+                message = "Facet is unavailable for this expansion.";
+                return false;
+            }
             width = Math.Max(1, Math.Min(512, width));
             height = Math.Max(1, Math.Min(512, height));
             if (name.Length == 0 || name.Length > 64 || x < 0 || y < 0 || x + width >= map.Width || y + height >= map.Height)
@@ -1039,6 +1054,11 @@ namespace Server.CustomBots
         {
             name = (name ?? "").Trim();
             var map = PlayerBotService.GetMap(facet);
+            if (map == null)
+            {
+                message = "Facet is unavailable for this expansion.";
+                return false;
+            }
             if (name.Length == 0 || name.Length > 64 || x < 0 || y < 0 || x >= map.Width || y >= map.Height)
             {
                 message = "Spawn needs a name and a point inside " + map.Name + ".";
@@ -1079,6 +1099,11 @@ namespace Server.CustomBots
             entranceName = (entranceName ?? "").Trim();
             interiorName = (interiorName ?? "").Trim();
             var map = PlayerBotService.GetMap(facet);
+            if (map == null)
+            {
+                message = "Facet is unavailable for this expansion.";
+                return false;
+            }
             if (name.Length == 0 || name.Length > 64 || entranceName.Length == 0 || interiorName.Length == 0 || String.Equals(entranceName, interiorName, StringComparison.OrdinalIgnoreCase))
             {
                 message = "Dungeon link needs a name plus different entrance and interior destinations.";

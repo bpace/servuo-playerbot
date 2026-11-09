@@ -168,4 +168,22 @@ if(help){
  };
  annotate(); new MutationObserver(annotate).observe(document.body,{childList:true,subtree:true});
 })();
+</script><script>
+/* The server advertises only facets legal for its configured expansion.
+   Keep the two selectors in lockstep with that capability list. */
+(()=>{
+ const originalDimensions=dimensions;
+ dimensions=name=>name==='Tokuno'?[1448,1448]:name==='TerMur'?[1280,4096]:originalDimensions(name);
+ const sync=()=>{
+  const names=Object.keys(state.facets||{});
+  if(!names.length)return;
+  [map,facet].forEach(select=>{
+   const previous=select.value;
+   select.innerHTML=names.map(name=>'<option>'+esc(name)+'</option>').join('');
+   select.value=names.includes(previous)?previous:names[0];
+  });
+ };
+ const originalRender=render;
+ render=()=>{sync();originalRender();};
+})();
 </script></body></html>

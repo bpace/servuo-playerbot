@@ -32,7 +32,7 @@ namespace Server.CustomBots
         // to Felucca.
         private static readonly Dictionary<string, int> FacetTargets = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
-            { "Felucca", 0 }, { "Trammel", 0 }, { "Ilshenar", 0 }, { "Malas", 0 }
+            { "Felucca", 0 }, { "Trammel", 0 }, { "Ilshenar", 0 }, { "Malas", 0 }, { "Tokuno", 0 }, { "TerMur", 0 }
         };
         public static string SpawnFacet = "Felucca";
         private static Timer _timer;
@@ -128,19 +128,22 @@ namespace Server.CustomBots
                 bot.Player = false;
                 PlayerBotPersonas.EnsureAppearance(bot);
                 bot.NextAction = DateTime.UtcNow + TimeSpan.FromMilliseconds(Utility.RandomMinMax(0, 1500));
-                if (bot.Map == Map.Internal)
+                if (!PlayerBotExpansionProfile.IsAvailable(bot.Map))
                 {
                     // Legacy v1 bots were saved as Player=true and lost their
-                    // logout facet. They were created on Felucca, so restore
-                    // those known records there. New records keep Player=false
-                    // and preserve whatever facet was selected at spawn time.
-                    var map = bot.LogoutMap == null || bot.LogoutMap == Map.Internal ? Map.Felucca : bot.LogoutMap;
+                    // logout facet. A later-era saved facet is likewise not
+                    // valid after an expansion downgrade, so both cases use
+                    // the profile's legal default when needed.
+                    var map = PlayerBotExpansionProfile.IsAvailable(bot.LogoutMap)
+                        ? bot.LogoutMap
+                        : PlayerBotExpansionProfile.DefaultMap;
+                    if (map == null) continue;
                     bot.MoveToWorld(bot.LogoutLocation, map);
                     restored++;
                 }
                 if (IsBankHubBot(bot)) InitializeBankSitter(bot, true);
             }
-            if (restored > 0) RecordEvent("Restored " + restored + " PlayerBot(s) from Internal to their saved facets.");
+            if (restored > 0) RecordEvent("Restored " + restored + " PlayerBot(s) to facets legal for this expansion.");
         }
 
         private static void OnCommand(CommandEventArgs e)
@@ -454,11 +457,14 @@ namespace Server.CustomBots
             foreach (var facetName in FacetNames)
             {
                 var facet = GetMap(facetName);
+                if (facet == null) continue;
+                City city;
+                if (!TryRandomCity(facet, out city)) continue;
                 var current = 0;
                 foreach (var bot in bots) if (bot.Map == facet) current++;
                 while (current < GetTarget(facetName))
                 {
-                    var bot = SpawnAt(RandomCity(facet), facet);
+                    var bot = SpawnAt(city, facet);
                     bots.Add(bot);
                     current++;
                     RecordEvent("Spawned " + bot.Name + " in " + bot.DestinationName + ".");
@@ -468,8 +474,16 @@ namespace Server.CustomBots
 
         private static PlayerBot SpawnNear(Mobile from, PlayerBotRole? requestedRole = null)
         {
-            var map = from == null || from.Map == null ? Map.Felucca : from.Map;
-            var point = from == null ? RandomCity(map).Location : from.Location;
+            var map = from == null || !PlayerBotExpansionProfile.IsAvailable(from.Map) ? PlayerBotExpansionProfile.DefaultMap : from.Map;
+            if (map == null) return null;
+            Point3D point;
+            if (from == null)
+            {
+                City city;
+                if (!TryRandomCity(map, out city)) return null;
+                point = city.Location;
+            }
+            else point = from.Location;
             var bot = new PlayerBot(requestedRole ?? RandomWandererRole());
             bot.MoveToWorld(new Point3D(point.X + Utility.RandomMinMax(-3, 3), point.Y + Utility.RandomMinMax(-3, 3), point.Z), map);
             EnsureDestination(bot);
@@ -518,6 +532,11 @@ namespace Server.CustomBots
             foreach (var definition in PlayerBotWorldData.GetSpawns())
             {
                 var map = GetMap(definition.Facet);
+                if (map == null)
+                {
+                    RecordEvent("Ignored unavailable expansion facet in spawn definition " + definition.Name + ".");
+                    continue;
+                }
                 PlayerBotRole role;
                 if (!Enum.TryParse(definition.Role, true, out role)) role = PlayerBotRole.Traveler;
                 if (roadPksOnly != (role == PlayerBotRole.PlayerKiller)) continue;
@@ -564,6 +583,7 @@ namespace Server.CustomBots
         private static string StartNativeDungeonTest(Map map)
         {
             if (!Enabled) return "Enable PlayerBots before starting a native dungeon test.";
+            if (!PlayerBotExpansionProfile.IsAvailable(map)) return "That facet is unavailable for this expansion.";
             PlayerBotWorldData.NativeDungeonTrip trip;
             if (!PlayerBotWorldData.TryGetAnyNativeDungeonTrip(map, out trip))
                 return "No verified native dungeon trip is available on " + (map == null ? "this map" : map.Name) + ". Finish the facet audit first.";
@@ -589,6 +609,7 @@ namespace Server.CustomBots
         private static string StartNativePartyDungeonTest(Map map)
         {
             if (!Enabled) return "Enable PlayerBots before starting a native party dungeon test.";
+            if (!PlayerBotExpansionProfile.IsAvailable(map)) return "That facet is unavailable for this expansion.";
             PlayerBotWorldData.NativeDungeonTrip trip;
             if (!PlayerBotWorldData.TryGetAnyNativeDungeonTrip(map, out trip))
                 return "No verified native dungeon trip is available on " + (map == null ? "this map" : map.Name) + ". Finish the facet audit first.";
@@ -1778,7 +1799,13 @@ namespace Server.CustomBots
                 PlayerBotWorldData.TryPlanRoute(bot, authored);
                 return;
             }
-            var city = RandomCity(bot.Map);
+            City city;
+            if (!TryRandomCity(bot.Map, out city))
+            {
+                bot.Destination = Point3D.Zero;
+                bot.DestinationName = "";
+                return;
+            }
             bot.Destination = new Point3D(city.Location.X + Utility.RandomMinMax(-8, 8), city.Location.Y + Utility.RandomMinMax(-8, 8), city.Location.Z);
             bot.DestinationName = city.Name;
         }
@@ -1833,8 +1860,10 @@ namespace Server.CustomBots
         // crowd; everyone else still gets a visible local gathering.
         private static void ReconcileBankHubs()
         {
-            ReconcileBankHubs(Map.Trammel, TrammelBritainBankCrowd, TrammelOtherBankCrowd);
-            ReconcileBankHubs(Map.Felucca, FeluccaBritainBankCrowd, FeluccaOtherBankCrowd);
+            if (PlayerBotExpansionProfile.IsAvailable(Map.Felucca))
+                ReconcileBankHubs(Map.Felucca, FeluccaBritainBankCrowd, FeluccaOtherBankCrowd);
+            if (PlayerBotExpansionProfile.IsAvailable(Map.Trammel))
+                ReconcileBankHubs(Map.Trammel, TrammelBritainBankCrowd, TrammelOtherBankCrowd);
         }
 
         private static void ReconcileBankHubs(Map map, int britainCrowd, int otherCrowd)
@@ -2206,7 +2235,16 @@ namespace Server.CustomBots
 
         internal static void ApplyDashboardAction(string action, int value, string facetName)
         {
-            if (!String.IsNullOrEmpty(facetName)) SpawnFacet = GetMap(facetName).Name;
+            if (!String.IsNullOrEmpty(facetName))
+            {
+                var requestedMap = GetMap(facetName);
+                if (requestedMap == null)
+                {
+                    RecordEvent("Ignored unavailable expansion facet " + facetName + ".");
+                    return;
+                }
+                SpawnFacet = requestedMap.Name;
+            }
             if (action == "enable")
             {
                 Enabled = true;
@@ -2230,7 +2268,18 @@ namespace Server.CustomBots
             {
                 var count = Math.Max(1, Math.Min(50, value));
                 var facet = GetSpawnMap();
-                for (var i = 0; i < count; i++) SpawnAt(RandomCity(facet), facet);
+                if (facet == null)
+                {
+                    RecordEvent("Spawn rejected because no PlayerBot facet is available for this expansion.");
+                    return;
+                }
+                City city;
+                if (!TryRandomCity(facet, out city))
+                {
+                    RecordEvent("Spawn rejected because " + facet.Name + " has no verified PlayerBot city yet.");
+                    return;
+                }
+                for (var i = 0; i < count; i++) SpawnAt(city, facet);
                 RecordEvent("Dashboard spawned " + count + " bot(s) on " + SpawnFacet + ".");
             }
             else if (action == "remove")
@@ -2242,6 +2291,11 @@ namespace Server.CustomBots
             else if (action == "removefacet")
             {
                 var facet = GetSpawnMap();
+                if (facet == null)
+                {
+                    RecordEvent("Remove rejected because no PlayerBot facet is available for this expansion.");
+                    return;
+                }
                 var removed = 0;
                 foreach (var bot in FindBots())
                 {
@@ -2307,35 +2361,39 @@ namespace Server.CustomBots
 
         internal static int GetTarget(string facetName)
         {
+            var map = GetMap(facetName);
+            if (map == null) return 0;
             int value;
-            return FacetTargets.TryGetValue(GetMap(facetName).Name, out value) ? value : 0;
+            return FacetTargets.TryGetValue(map.Name, out value) ? value : 0;
         }
 
         private static void SetTarget(string facetName, int value)
         {
-            FacetTargets[GetMap(facetName).Name] = value;
+            var map = GetMap(facetName);
+            if (map != null) FacetTargets[map.Name] = value;
         }
 
-        internal static readonly string[] FacetNames = { "Felucca", "Trammel", "Ilshenar", "Malas" };
+        internal static string[] FacetNames { get { return PlayerBotExpansionProfile.FacetNames; } }
 
         private static Map GetSpawnMap()
         {
-            return GetMap(SpawnFacet);
+            return GetMap(SpawnFacet) ?? PlayerBotExpansionProfile.DefaultMap;
         }
 
         internal static Map GetMap(string name)
         {
-            if (String.Equals(name, "Trammel", StringComparison.OrdinalIgnoreCase)) return Map.Trammel;
-            if (String.Equals(name, "Ilshenar", StringComparison.OrdinalIgnoreCase)) return Map.Ilshenar;
-            if (String.Equals(name, "Malas", StringComparison.OrdinalIgnoreCase)) return Map.Malas;
-            return Map.Felucca;
+            Map map;
+            return PlayerBotExpansionProfile.TryGetMap(name, out map) ? map : null;
         }
 
-        private static City RandomCity(Map facet)
+        private static bool TryRandomCity(Map facet, out City city)
         {
+            city = null;
             var choices = new List<City>();
-            foreach (var city in Cities) if (city.Facet == facet) choices.Add(city);
-            return choices.Count == 0 ? Cities[0] : choices[Utility.Random(choices.Count)];
+            foreach (var candidate in Cities) if (candidate.Facet == facet) choices.Add(candidate);
+            if (choices.Count == 0) return false;
+            city = choices[Utility.Random(choices.Count)];
+            return true;
         }
 
         internal static List<string> GetEvents()
